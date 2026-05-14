@@ -1,0 +1,6 @@
+streamlit
+streamlit-drawable-canvas
+ezdxf
+matplotlib
+pillow
+plotly
