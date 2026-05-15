@@ -1,4 +1,4 @@
-"""부재 부호 카운팅 로직 — DXF TEXT/MTEXT 엔티티 기반"""
+"""부재 부호 카운팅 로직 — DXF TEXT/MTEXT 및 INSERT 블록 엔티티 기반"""
 import re
 from collections import Counter
 from typing import Callable
@@ -17,19 +17,63 @@ _AUTO_DETECT = re.compile(r"^[A-Z]{1,5}\d{1,2}$")
 
 
 def _clean_mtext(raw: str) -> str:
-    """MTEXT 서식 코드 제거 후 순수 텍스트 반환"""
     return _MTEXT_ESCAPE.sub("", raw).strip()
 
 
-def _entity_insert(entity) -> tuple[float, float] | None:
-    """TEXT / MTEXT 엔티티에서 삽입 좌표 반환"""
+def _collect_from_insert(
+    entity,
+    doc,
+    match_fn: Callable[[str], bool],
+) -> list[tuple[float, float, str]]:
+    """INSERT 엔티티에서 (x, y, symbol) 목록 추출.
+
+    ATTRIB(인스턴스 속성값) → 블록 정의 내 TEXT/ATTDEF(기본값) 순으로 확인.
+    같은 INSERT에서 동일 부호가 중복 집계되지 않도록 seen으로 deduplicate.
+    """
     try:
-        if entity.dxftype() in ("TEXT", "MTEXT"):
-            pt = entity.dxf.insert
-            return float(pt.x), float(pt.y)
-        return None
+        pt = entity.dxf.insert
+        x, y = float(pt.x), float(pt.y)
     except Exception:
-        return None
+        return []
+
+    found: list[tuple[float, float, str]] = []
+    seen: set[str] = set()
+
+    # 1. ATTRIB: INSERT에 직접 붙은 속성값 (도면4 등)
+    try:
+        for attrib in entity.attribs:
+            try:
+                val = attrib.dxf.text.strip() if attrib.dxf.hasattr("text") else ""
+                if val and match_fn(val) and val not in seen:
+                    found.append((x, y, val))
+                    seen.add(val)
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+    # 2. 블록 정의 내 TEXT / ATTDEF — ATTRIB가 없을 때만 (도면2 등)
+    if not found:
+        try:
+            block = doc.blocks.get(entity.dxf.name)
+            if block:
+                for be in block:
+                    btype = be.dxftype()
+                    if btype == "TEXT":
+                        val = be.dxf.text.strip() if be.dxf.hasattr("text") else ""
+                    elif btype == "MTEXT":
+                        val = _clean_mtext(be.plain_mtext()) if hasattr(be, "plain_mtext") else ""
+                    elif btype == "ATTDEF":
+                        val = be.dxf.text.strip() if be.dxf.hasattr("text") else ""
+                    else:
+                        continue
+                    if val and match_fn(val) and val not in seen:
+                        found.append((x, y, val))
+                        seen.add(val)
+        except Exception:
+            pass
+
+    return found
 
 
 def count_members(
@@ -66,25 +110,30 @@ def count_members(
     hits: list[tuple[float, float, str]] = []
     coords_by_symbol: dict[str, list[tuple[float, float]]] = {}
 
+    def _record(x: float, y: float, text: str) -> None:
+        counts[text] += 1
+        hits.append((x, y, text))
+        coords_by_symbol.setdefault(text, []).append((x, y))
+
     for entity in msp:
         dtype = entity.dxftype()
-        if dtype not in ("TEXT", "MTEXT"):
-            continue
 
-        raw = entity.dxf.text
-        text = _clean_mtext(raw) if dtype == "MTEXT" else raw.strip()
+        if dtype in ("TEXT", "MTEXT"):
+            try:
+                raw = entity.dxf.text
+                text = _clean_mtext(raw) if dtype == "MTEXT" else raw.strip()
+                if not match_fn(text):
+                    continue
+                pt = entity.dxf.insert
+                x, y = float(pt.x), float(pt.y)
+                if xmin <= x <= xmax and ymin <= y <= ymax:
+                    _record(x, y, text)
+            except Exception:
+                pass
 
-        if not match_fn(text):
-            continue
-
-        coord = _entity_insert(entity)
-        if coord is None:
-            continue
-
-        x, y = coord
-        if xmin <= x <= xmax and ymin <= y <= ymax:
-            counts[text] += 1
-            hits.append((x, y, text))
-            coords_by_symbol.setdefault(text, []).append((x, y))
+        elif dtype == "INSERT":
+            for x, y, text in _collect_from_insert(entity, doc, match_fn):
+                if xmin <= x <= xmax and ymin <= y <= ymax:
+                    _record(x, y, text)
 
     return counts, hits, coords_by_symbol
