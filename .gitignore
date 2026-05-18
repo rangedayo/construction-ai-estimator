@@ -29,8 +29,9 @@ desktop.ini
 *.swp
 *.swo
 
-# 샘플 도면 (기밀인 경우 주석 해제)
-# sample_data/
+# 샘플 도면 · 참고 자료 (기밀 — git 추적 제외, 로컬 보관)
+sample_data/
+reference_materials/
 
 # 임시 파일
 *.tmp

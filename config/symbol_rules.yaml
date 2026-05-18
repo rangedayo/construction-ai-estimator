@@ -34,6 +34,6 @@ text_height_filter:
   도면1:
     min_height: 177       # height > 176만 카운트 (159·176 작은글자 제외)
   도면2:
-    min_height: null      # 진단 전이므로 필터 미적용
+    min_height: 302       # height 301(작은글자) 제외, 400(큰글자)만 카운트 (라운드 4)
   도면4:
     min_height: null      # 진단 전이므로 필터 미적용
