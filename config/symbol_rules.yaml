@@ -1,0 +1,39 @@
+# 철골 부재 카운팅 규칙 — 1단계 합계 기준 카운팅.
+#
+# 라운드 2 방침: 페이지 분할 폐기. 도면 전체에서 보이는 철골 부호 종류·개수를
+# 합계 기준으로 카운트한다. 이 파일은 "무엇을 셀지(화이트리스트)"와
+# "무엇을 거를지(제외 규칙)"만 정의한다. 페이지 bbox·더블카운팅 정책은 폐기됨.
+
+# ── 1단계 카운팅 대상 — 철골 부재만 ──────────────────────────────────────────
+steel_whitelist:
+  columns:    [MC1, MC2, MC3, SC1, SC2]
+  girders:    [SG1, SG2, SG3, WG1, CRG1, VG1, MT1]
+  beams:      [SB1, SB2, SB3, VT1]
+  roof_beams: [RSG1, RSG2, RSG3, RSB1, RSB2, RSB3]
+  braces:     [BR1, BR2]
+
+# ── 카운트 제외 prefix (자동 거름) ───────────────────────────────────────────
+excluded_prefixes:
+  foundation: [F, FS, MF]      # 콘크리트 기초
+  rebar:      [HD, D, SR, SBR] # 철근
+  detail:     [DS, DT]         # 상세 참조
+  thickness:  [THK]            # 두께 표기
+  grid:       [X, Y]           # 통심선 (X01, Y01 등)
+
+# ── 카운트 제외 패턴 (자동 거름) ─────────────────────────────────────────────
+excluded_patterns:
+  - "^H-\\d"  # H-200x100 같은 규격 표기
+  - "^\\d+$"  # 순수 숫자
+
+# ── 도면별 텍스트 height 필터 ────────────────────────────────────────────────
+# 도면마다 부재 실표기는 "큰 글자", 주석·상세참조 등 오탐은 "작은 글자"로
+# height 가 갈린다. min_height 이상인 텍스트만 카운트해 작은 글자를 거른다.
+#   min_height: 숫자  → 그 height 이상만 카운트
+#   min_height: null  → 필터 미적용 (모든 height 카운트)
+text_height_filter:
+  도면1:
+    min_height: 177       # height > 176만 카운트 (159·176 작은글자 제외)
+  도면2:
+    min_height: null      # 진단 전이므로 필터 미적용
+  도면4:
+    min_height: null      # 진단 전이므로 필터 미적용

@@ -4,3 +4,7 @@ ezdxf
 matplotlib
 pillow
 plotly
+# 테스트 인프라 / 설정 파일용
+openpyxl
+pyyaml
+pytest
