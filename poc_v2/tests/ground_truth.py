@@ -23,7 +23,9 @@ import openpyxl
 # tests/ground_truth.py → poc_v2/tests → poc_v2 → 프로젝트 루트
 _HERE = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(os.path.dirname(_HERE))
-ANSWER_KEY_PATH = os.path.join(PROJECT_ROOT, "도면_정답지.xlsx")
+ANSWER_KEY_PATH = os.path.join(
+    PROJECT_ROOT, "reference_materials", "도면_정답지.xlsx"
+)
 SYMBOL_RULES_PATH = os.path.join(
     PROJECT_ROOT, "config", "symbol_rules.yaml"
 )
