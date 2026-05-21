@@ -41,7 +41,10 @@ def _whole_drawing_counts(drawing: str) -> dict[str, int]:
 
 
 # ── 파라미터 케이스 빌드 — (도면, 부호) 페어 자동 생성 ──────────────────────────
-_TOTALS = drawing_symbol_totals()
+_TOTALS = drawing_symbol_totals(
+    category="기둥",
+    drawings=["도면1", "도면2", "도면4"],
+)
 
 _TOTAL_CASES: list = []
 for _drawing in sorted(_TOTALS):

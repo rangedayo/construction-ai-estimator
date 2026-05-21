@@ -1,15 +1,16 @@
 """도면 정답지(xlsx) 로더 — 회귀 테스트용 결정론적 정답 데이터.
 
-라운드 2 방침: 페이지 분할 폐기. 정답지를 페이지 단위로 분해하지 않고
-'도면 전체에서 부호별 합계'만 로드한다.
-
-정답지(`reference_materials/도면 정답지.xlsx`)는 시트마다 매트릭스 형태:
-    행 = 도면 페이지,  열 = 부재 부호,  셀 = 해당 페이지의 부호 개수
+라운드 7 방침: 시트가 `도면N-기둥`·`도면N-보` 로 분리됐다.
+시트 안 구조:
+    1행 = 헤더: `도면명 | 분석 대상 | <부호1> | <부호2> | ... | 합계`
+    2행~끝-1 = 도면 내 세부 도면별 부호 개수
+    끝 행 = `합계` 행(SUM 수식, 신뢰 금지)
 
 셀 값 해석 규칙:
-    빈 셀(None)  → 그 페이지에 그 부호 없음
-    0            → 부호는 등장하나 개수 0개
-    '합계' 행/열  → 집계용이므로 제외 (페이지 셀을 직접 합산한다)
+    빈 셀(None, "")    → 해당 도면에 그 부호 없음 (0으로 간주)
+    숫자가 아닌 값      → 0으로 간주
+    `합계` 행/`합계` 열 → 집계용이므로 제외 (데이터 행을 직접 합산한다)
+    `분석 대상` 열      → 메모용, 카운트와 무관
 
 LLM 호출 등 비결정 요소 없이 순수하게 xlsx만 파싱한다.
 """
@@ -22,14 +23,14 @@ import openpyxl
 # tests/ground_truth.py → poc_v2/tests → poc_v2 → 프로젝트 루트
 _HERE = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(os.path.dirname(_HERE))
-ANSWER_KEY_PATH = os.path.join(
-    PROJECT_ROOT, "reference_materials", "도면_정답지.xlsx"
-)
+ANSWER_KEY_PATH = os.path.join(PROJECT_ROOT, "도면_정답지.xlsx")
 SYMBOL_RULES_PATH = os.path.join(
     PROJECT_ROOT, "config", "symbol_rules.yaml"
 )
 
 _TOTAL_LABEL = "합계"
+_NON_SYMBOL_HEADERS = frozenset({"도면명", "분석 대상", _TOTAL_LABEL})
+_CATEGORY_SUFFIXES = ("-기둥", "-보")
 
 
 def load_text_height_filter(
@@ -132,50 +133,94 @@ def _load_config(path: str | None) -> dict:
         return yaml.safe_load(handle) or {}
 
 
+def _parse_cell_int(value: object) -> int:
+    """셀 값을 정수 카운트로 해석. 빈 셀·비숫자는 0."""
+    if value is None or value == "":
+        return 0
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _drawing_name_from_sheet(sheet_name: str) -> tuple[str, str | None]:
+    """`도면1-기둥` → (`도면1`, `기둥`). 접미사 없으면 (sheet_name, None)."""
+    for suffix in _CATEGORY_SUFFIXES:
+        if sheet_name.endswith(suffix):
+            return sheet_name[: -len(suffix)], suffix[1:]
+    return sheet_name, None
+
+
+def _parse_sheet(worksheet) -> dict[str, int]:
+    """시트 하나에서 부호별 합계를 데이터 행 직접 합산으로 산출."""
+    rows = list(worksheet.iter_rows(values_only=True))
+    if not rows:
+        return {}
+
+    header = rows[0]
+    symbol_columns: list[tuple[int, str]] = []
+    for col_idx, raw_name in enumerate(header):
+        if raw_name is None:
+            continue
+        label = str(raw_name).strip()
+        if not label or label in _NON_SYMBOL_HEADERS:
+            continue
+        symbol_columns.append((col_idx, label))
+
+    aggregated: dict[str, int] = {}
+    for row in rows[1:]:
+        if not row:
+            continue
+        raw_first = row[0]
+        first_value = "" if raw_first is None else str(raw_first).strip()
+        if first_value == _TOTAL_LABEL:
+            continue
+        for col_idx, symbol in symbol_columns:
+            value = row[col_idx] if col_idx < len(row) else None
+            count = _parse_cell_int(value)
+            if count <= 0:
+                continue
+            aggregated[symbol] = aggregated.get(symbol, 0) + count
+    return aggregated
+
+
 def drawing_symbol_totals(
     path: str | None = None,
+    category: str | None = None,
+    drawings: list[str] | None = None,
 ) -> dict[str, dict[str, int]]:
     """{도면명: {부호: 도면 전체 합계}} 형태로 정답지를 파싱해 반환한다.
 
-    정답지의 '합계' 행을 신뢰하지 않고 페이지 셀에서 직접 합산한다
-    (합계 행은 수기 입력이라 오차가 있을 수 있음). 빈 셀은 0으로 보고
-    한 번이라도 등장한 부호만 결과에 포함한다.
+    Args:
+        path: xlsx 경로 (None 이면 ANSWER_KEY_PATH).
+        category: `"기둥"` / `"보"` / None.
+            "기둥"·"보" 면 해당 접미사 시트만 선택, None 이면 같은 도면의
+            기둥·보 시트를 dict merge.
+        drawings: 도면명 화이트리스트 (예: ["도면1", "도면2", "도면4"]).
+            None 이면 전체.
+
+    합계 행(1열 == "합계")은 SUM 수식이라 캐시값을 신뢰하지 않고 건너뛴다.
+    데이터 행에서 부호별 셀을 직접 누적 합산하고, 한 번이라도 0보다 큰
+    값으로 등장한 부호만 결과 dict에 포함한다.
     """
     workbook = openpyxl.load_workbook(path or ANSWER_KEY_PATH, data_only=True)
+    drawings_set = set(drawings) if drawings is not None else None
     totals: dict[str, dict[str, int]] = {}
 
     for sheet_name in workbook.sheetnames:
-        worksheet = workbook[sheet_name]
-        rows = list(worksheet.iter_rows(values_only=True))
-        if not rows:
+        drawing_name, sheet_category = _drawing_name_from_sheet(sheet_name)
+        if category is not None and sheet_category != category:
+            continue
+        if drawings_set is not None and drawing_name not in drawings_set:
             continue
 
-        header = rows[0]
-        # (열 인덱스, 부호명) — 0번 열(도면명)과 '합계' 열은 제외
-        symbol_columns: list[tuple[int, str]] = []
-        for col_idx, raw_name in enumerate(header[1:], start=1):
-            if raw_name is None:
-                continue
-            label = str(raw_name).strip()
-            if not label or label == _TOTAL_LABEL:
-                continue
-            symbol_columns.append((col_idx, label))
+        aggregated = _parse_sheet(workbook[sheet_name])
+        if not aggregated:
+            continue
 
-        aggregated: dict[str, int] = {}
-        for row in rows[1:]:
-            raw_page = row[0]
-            if raw_page is None:
-                continue
-            page_name = str(raw_page).strip()
-            if not page_name or page_name == _TOTAL_LABEL:
-                continue
-            for col_idx, symbol in symbol_columns:
-                value = row[col_idx] if col_idx < len(row) else None
-                if value is None or value == "":
-                    continue
-                aggregated[symbol] = aggregated.get(symbol, 0) + int(value)
-
-        totals[sheet_name] = aggregated
+        bucket = totals.setdefault(drawing_name, {})
+        for symbol, count in aggregated.items():
+            bucket[symbol] = bucket.get(symbol, 0) + count
 
     return totals
 
