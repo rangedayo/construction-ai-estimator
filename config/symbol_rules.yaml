@@ -37,3 +37,41 @@ text_height_filter:
     min_height: 302       # height 301(작은글자) 제외, 400(큰글자)만 카운트 (라운드 4)
   도면4:
     min_height: null      # 진단 전이므로 필터 미적용
+
+# ── 라운드 6: policy_p 도면별 분기 폐기 → 신호 2·3 자동 판단으로 대체 ────────
+# 라운드 5 의 policy_p 도면별 수동 분기는 auto_policy.auto_detect_policy 가
+# 도면 분석으로 자동 산출한다. 롤백 대비 원본을 주석으로 보존한다.
+# policy_p:
+#   도면1:
+#     exclude_table_regions: false
+#     exclude_with_spec: false
+#   도면2:
+#     exclude_table_regions: false
+#     exclude_with_spec: false    # BR2 매칭 보호
+#   도면4:
+#     exclude_table_regions: true
+#     exclude_with_spec: true
+
+# ── 라운드 6: 정책 자동 판단 파라미터 (모든 도면 공통) ───────────────────────
+# spec_pattern_threshold : 부호+규격 패턴 빈도 임계값. 화이트리스트 부호 수 ×
+#                          이 비율 이상이면 exclude_with_spec=True (신호 3).
+auto_policy_params:
+  spec_pattern_threshold: 0.3
+
+# ── 라운드 6: 자동 판단 오버라이드 (비상시만; 기본 null = 자동) ──────────────
+# null  → auto_detect_policy 의 신호 2·3 자동 결정을 사용한다.
+# dict  → 자동 판단을 무시하고 강제. 예:
+#   도면X: { exclude_table_regions: true, exclude_with_spec: false }
+policy_override:
+  도면1: null
+  도면2: null
+  도면4: null
+
+# ── 일람표 영역 검출 파라미터 (정책 P 신호 1) ───────────────────────────────
+# region_size_ratio    : 그리드 셀 크기 = 도면 폭 × 이 비율
+# min_distinct_symbols : 한 영역에 이 종류 수 이상이면 일람표 후보
+# max_count_per_symbol : 부호당 등장이 이 수 이하여야 일람표 (부재 밀집 영역 배제)
+table_region_detection:
+  region_size_ratio: 0.033
+  min_distinct_symbols: 4
+  max_count_per_symbol: 2

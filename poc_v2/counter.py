@@ -21,12 +21,25 @@ def _clean_mtext(raw: str) -> str:
     return _MTEXT_ESCAPE.sub("", raw).strip()
 
 
-def match_symbol(text: str, whitelist: set[str]) -> str | None:
+def match_symbol(
+    text: str,
+    whitelist: set[str],
+    exclude_with_spec: bool = False,
+) -> str | None:
     """텍스트를 화이트리스트 부호와 매칭한다 — 정확 일치 + 안전한 부분 일치.
 
     "BR2 L-80X80X7" → "BR2", "MC1 추가" → "MC1" 처럼 부호 뒤에 규격·주석이
     붙은 경우도 잡는다. 단 "MC10"이 "MC1"으로 잘못 매칭되지 않도록, 부호 뒤
     첫 글자가 숫자이면 다른 부호로 보고 건너뛴다.
+
+    exclude_with_spec
+        False(기본) → 기존 동작 그대로. 부호 뒤 공백/하이픈이 와도 부호로 매칭.
+        True         → 라운드 5 정책 P 신호 2. '부호 + 공백/하이픈/줄바꿈(\\P)
+                       + 규격' 형태(예: "SC1 350x175x7/11")는 규격 안내 표기로
+                       보고 카운트에서 제외(None 반환). 정확 일치는 그대로 통과.
+
+    주의: exclude_with_spec=True 를 BR2 가 있는 도면에 쓰면 "BR2 L-80X80X7"
+    매칭이 깨진다. 도면4 처럼 BR2 가 없는 도면에서만 활성화할 것.
     """
     text = text.strip()
     if text in whitelist:
@@ -38,7 +51,13 @@ def match_symbol(text: str, whitelist: set[str]) -> str | None:
             if not after:
                 return w
             if after[0] in (" ", "-"):
+                # 규격 안내 표기 제외 모드: 부호 뒤 규격이 붙으면 카운트 안 함
+                if exclude_with_spec:
+                    return None
                 return w
+            # MTEXT \P(줄바꿈) 뒤 규격이 붙은 형태도 규격 안내로 본다
+            if exclude_with_spec and after.startswith("\\P"):
+                return None
             # "MC1" 뒤에 숫자가 오면 "MC10" 같은 다른 부호임 → 매칭 안 함
             if after[0].isdigit():
                 continue
@@ -141,6 +160,7 @@ def count_members(
     ymax: float,
     custom_whitelist: list[str] | None = None,
     min_text_height: float | None = None,
+    exclude_with_spec: bool = False,
 ) -> tuple[Counter, list[tuple[float, float, str]], dict[str, list[tuple[float, float]]]]:
     """
     Parameters
@@ -152,6 +172,11 @@ def count_members(
         None  → height 필터 미적용 (모든 height 카운트, 기존 동작)
         숫자  → 텍스트 height 가 그 값 이상인 엔티티만 카운트.
                 height 정보가 없는 엔티티는 안전하게 통과시킨다.
+    exclude_with_spec
+        False(기본) → 기존 동작.
+        True         → 라운드 5 정책 P 신호 2. '부호 + 규격' 형태 텍스트
+                       (예: "SC1 350x175x7/11")를 카운트에서 제외한다.
+                       custom_whitelist 가 지정된 경우에만 효과가 있다.
 
     Returns
     -------
@@ -165,7 +190,7 @@ def count_members(
         )
     else:
         whitelist_set = set(custom_whitelist)
-        match_fn = lambda t: match_symbol(t, whitelist_set)
+        match_fn = lambda t: match_symbol(t, whitelist_set, exclude_with_spec)
 
     doc = ezdxf.readfile(dxf_path)
     msp = doc.modelspace()
@@ -206,3 +231,42 @@ def count_members(
                     _record(x, y, text)
 
     return counts, hits, coords_by_symbol
+
+
+def diagnose_duplicate_coords(
+    coords_by_symbol: dict[str, list[tuple[float, float]]],
+    tolerance_mm: float = 1.0,
+) -> dict[str, list[dict]]:
+    """동일 좌표(tolerance 이내) 부호 중복 진단 — 라운드 5 정책 P 신호 3.
+
+    같은 부호의 엔티티가 tolerance_mm 이내 거의 같은 좌표에 2개 이상 겹쳐 있는
+    곳을 찾는다. 자동 제거는 하지 않는다(카운트는 그대로). 적산 전문가 검수
+    단계에 넘길 경고 메모용 진단 정보만 돌려준다.
+
+    Returns
+    -------
+    {부호: [{"coord": (x, y), "count": n}, ...]}
+        n >= 2 인 중복 지점만 포함. 중복이 없는 부호는 키 자체가 없다.
+    """
+    result: dict[str, list[dict]] = {}
+    for symbol, coords in coords_by_symbol.items():
+        # 대표 좌표 단위로 묶는다 — [rep_x, rep_y, count]
+        groups: list[list[float]] = []
+        for x, y in coords:
+            for group in groups:
+                if (
+                    abs(x - group[0]) <= tolerance_mm
+                    and abs(y - group[1]) <= tolerance_mm
+                ):
+                    group[2] += 1
+                    break
+            else:
+                groups.append([x, y, 1])
+        dups = [
+            {"coord": (g[0], g[1]), "count": int(g[2])}
+            for g in groups
+            if g[2] >= 2
+        ]
+        if dups:
+            result[symbol] = dups
+    return result

@@ -23,7 +23,7 @@ import openpyxl
 _HERE = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(os.path.dirname(_HERE))
 ANSWER_KEY_PATH = os.path.join(
-    PROJECT_ROOT, "reference_materials", "도면 정답지.xlsx"
+    PROJECT_ROOT, "reference_materials", "도면_정답지.xlsx"
 )
 SYMBOL_RULES_PATH = os.path.join(
     PROJECT_ROOT, "config", "symbol_rules.yaml"
@@ -40,6 +40,87 @@ def load_text_height_filter(
     min_height 가 null(YAML) 이면 None 으로, 숫자면 그대로 돌려준다.
     설정 파일이나 pyyaml 이 없으면 빈 dict (= 모든 도면 필터 미적용).
     """
+    config = _load_config(path)
+    raw = config.get("text_height_filter", {}) or {}
+    return {
+        drawing: (spec or {}).get("min_height")
+        for drawing, spec in raw.items()
+    }
+
+
+def load_auto_policy_params(
+    path: str | None = None,
+) -> dict[str, float]:
+    """symbol_rules.yaml 의 auto_policy_params → 자동 정책 판단 파라미터.
+
+    라운드 6: 신호 3(규격 패턴) 임계값. 누락 시 auto_detect_policy 기본값.
+    """
+    config = _load_config(path)
+    raw = config.get("auto_policy_params", {}) or {}
+    return {
+        "spec_pattern_threshold": float(raw.get("spec_pattern_threshold", 0.3)),
+    }
+
+
+def load_policy_override(
+    drawing_name: str,
+    path: str | None = None,
+) -> dict[str, bool] | None:
+    """symbol_rules.yaml 의 policy_override[drawing_name] 로드.
+
+    라운드 6: 자동 판단을 강제로 덮어쓰는 비상용 설정. yaml 값이 null 이거나
+    키가 없으면 None 을 돌려준다(= 자동 판단 사용). dict 면 두 플래그를 채운
+    정규화된 dict 를 돌려준다.
+    """
+    config = _load_config(path)
+    raw = (config.get("policy_override", {}) or {}).get(drawing_name)
+    if not raw:
+        return None
+    return {
+        "exclude_table_regions": bool(raw.get("exclude_table_regions", False)),
+        "exclude_with_spec": bool(raw.get("exclude_with_spec", False)),
+    }
+
+
+def load_policy_p(
+    path: str | None = None,
+) -> dict[str, dict[str, bool]]:
+    """[DEPRECATED — 라운드 6] symbol_rules.yaml 의 policy_p → {도면명: {플래그}}.
+
+    라운드 5 정책 P 도면별 수동 분기 로더. 라운드 6 에서 policy_p 키는
+    주석 처리되고 신호 2·3 은 auto_policy.auto_detect_policy 가 자동 판단한다.
+    yaml 키가 폐기됐으므로 이 함수는 빈 dict 를 돌려준다. 호출 금지.
+    """
+    config = _load_config(path)
+    raw = config.get("policy_p", {}) or {}
+    result: dict[str, dict[str, bool]] = {}
+    for drawing, spec in raw.items():
+        spec = spec or {}
+        result[drawing] = {
+            "exclude_table_regions": bool(spec.get("exclude_table_regions", False)),
+            "exclude_with_spec": bool(spec.get("exclude_with_spec", False)),
+        }
+    return result
+
+
+def load_table_region_params(
+    path: str | None = None,
+) -> dict[str, float | int]:
+    """symbol_rules.yaml 의 table_region_detection → 일람표 검출 파라미터.
+
+    누락 시 detect_table_regions 기본값과 같은 값으로 채운다.
+    """
+    config = _load_config(path)
+    raw = config.get("table_region_detection", {}) or {}
+    return {
+        "region_size_ratio": float(raw.get("region_size_ratio", 1 / 30)),
+        "min_distinct_symbols": int(raw.get("min_distinct_symbols", 4)),
+        "max_count_per_symbol": int(raw.get("max_count_per_symbol", 2)),
+    }
+
+
+def _load_config(path: str | None) -> dict:
+    """symbol_rules.yaml 파싱. pyyaml·파일 부재 시 빈 dict."""
     try:
         import yaml  # noqa: PLC0415
     except ImportError:
@@ -48,12 +129,7 @@ def load_text_height_filter(
     if not os.path.exists(cfg_path):
         return {}
     with open(cfg_path, encoding="utf-8") as handle:
-        config = yaml.safe_load(handle) or {}
-    raw = config.get("text_height_filter", {}) or {}
-    return {
-        drawing: (spec or {}).get("min_height")
-        for drawing, spec in raw.items()
-    }
+        return yaml.safe_load(handle) or {}
 
 
 def drawing_symbol_totals(

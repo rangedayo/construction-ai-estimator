@@ -26,44 +26,18 @@ for _path in (_POC_DIR, _HERE):
     if _path not in sys.path:
         sys.path.insert(0, _path)
 
-from counter import count_members  # noqa: E402
-from ground_truth import (  # noqa: E402
-    PROJECT_ROOT,
-    drawing_symbol_totals,
-    load_text_height_filter,
-    within_tolerance,
-)
-
-# 도면 전체를 포함하도록 충분히 큰 bbox (좌표 필터를 항상 통과)
-_FULL_EXTENT = (-1e18, -1e18, 1e18, 1e18)
-
-_DEFAULT_DXF_FILES = {
-    "도면1": "도면1.dxf",
-    "도면2": "도면2.dxf",
-    "도면4": "도면4.dxf",
-}
-
-
-def _dxf_path(drawing: str) -> str:
-    return os.path.join(
-        PROJECT_ROOT, "sample_data", _DEFAULT_DXF_FILES.get(drawing, f"{drawing}.dxf")
-    )
-
-
-# 도면별 텍스트 height 임계값 (config/symbol_rules.yaml 기반)
-_HEIGHT_FILTER = load_text_height_filter()
+from baseline import predict  # noqa: E402
+from ground_truth import drawing_symbol_totals, within_tolerance  # noqa: E402
 
 
 @functools.lru_cache(maxsize=None)
 def _whole_drawing_counts(drawing: str) -> dict[str, int]:
-    """도면 전체에서 정답지에 등장하는 부호들을 카운트(도면당 1회, 캐시)."""
-    symbols = sorted(drawing_symbol_totals()[drawing].keys())
-    min_h = _HEIGHT_FILTER.get(drawing)
-    counts, _hits, _coords = count_members(
-        _dxf_path(drawing), *_FULL_EXTENT,
-        custom_whitelist=symbols, min_text_height=min_h,
-    )
-    return dict(counts)
+    """도면 전체 부호별 최종 카운트(도면당 1회, 캐시).
+
+    라운드 5 부터 baseline.predict 를 거쳐 정책 P(일람표·규격 안내 제외)까지
+    적용된 카운트를 쓴다. 정책 P 가 비활성인 도면1·2 는 기존 동작과 동일하다.
+    """
+    return predict(drawing)
 
 
 # ── 파라미터 케이스 빌드 — (도면, 부호) 페어 자동 생성 ──────────────────────────
