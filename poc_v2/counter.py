@@ -25,18 +25,28 @@ def match_symbol(
     text: str,
     whitelist: set[str],
     exclude_with_spec: bool = False,
+    treat_slash_as_combo: bool = False,
 ) -> str | None:
     """텍스트를 화이트리스트 부호와 매칭한다 — 정확 일치 + 안전한 부분 일치.
 
-    "BR2 L-80X80X7" → "BR2", "MC1 추가" → "MC1" 처럼 부호 뒤에 규격·주석이
-    붙은 경우도 잡는다. 단 "MC10"이 "MC1"으로 잘못 매칭되지 않도록, 부호 뒤
-    첫 글자가 숫자이면 다른 부호로 보고 건너뛴다.
+    "BR2 L-80X80X7" → "BR2", "MC1 추가" → "MC1", "C1/P1" → "C1" 처럼 부호
+    뒤에 규격·주석·다른 부호가 슬래시로 결합된 경우도 잡는다. 단 "MC10"이
+    "MC1"으로 잘못 매칭되지 않도록, 부호 뒤 첫 글자가 숫자이면 다른 부호로
+    보고 건너뛴다. 슬래시(/) 는 숫자가 아니므로 이 보호 룰을 통과한다.
 
     exclude_with_spec
         False(기본) → 기존 동작 그대로. 부호 뒤 공백/하이픈이 와도 부호로 매칭.
         True         → 라운드 5 정책 P 신호 2. '부호 + 공백/하이픈/줄바꿈(\\P)
                        + 규격' 형태(예: "SC1 350x175x7/11")는 규격 안내 표기로
                        보고 카운트에서 제외(None 반환). 정확 일치는 그대로 통과.
+
+    treat_slash_as_combo
+        False(기본) → exclude_with_spec=True 일 때 슬래시 결합도 None 반환.
+                      detect_table_region.load_text_layout 등 일람표 검출 입력
+                      정리 모드에서 본체 좌표(예: "C1/P1" 8개) 오염을 막는다.
+        True         → exclude_with_spec=True 라도 슬래시 결합은 본체로 인정해
+                      통과시킨다. 회귀 카운트 모드에서 본체 텍스트 누락을 방지.
+                      라운드 8: 도면3 처럼 본체가 "기둥/패널" 결합 표기인 경우.
 
     주의: exclude_with_spec=True 를 BR2 가 있는 도면에 쓰면 "BR2 L-80X80X7"
     매칭이 깨진다. 도면4 처럼 BR2 가 없는 도면에서만 활성화할 것.
@@ -51,8 +61,18 @@ def match_symbol(
             if not after:
                 return w
             if after[0] in (" ", "-"):
-                # 규격 안내 표기 제외 모드: 부호 뒤 규격이 붙으면 카운트 안 함
+                # 규격 안내 표기 제외 모드: 부호 뒤 공백/하이픈 + 규격이 붙으면
+                # 카운트 안 함 (예: "SC1 350x175x7/11", "C1-600x407x20x35")
                 if exclude_with_spec:
+                    return None
+                return w
+            if after[0] == "/":
+                # 라운드 8: 슬래시는 "다른 부호와의 결합 표기"(예: 기둥 C1 + 패널
+                # P1 → "C1/P1")이지 규격 안내가 아니다. exclude_with_spec=True
+                # 일 때의 행동은 treat_slash_as_combo 가 가른다:
+                #   회귀 카운트 모드 → True 전달 → 본체로 인정해 통과
+                #   일람표 검출 모드 → False (기본) → None 반환(좌표 오염 방지)
+                if exclude_with_spec and not treat_slash_as_combo:
                     return None
                 return w
             # MTEXT \P(줄바꿈) 뒤 규격이 붙은 형태도 규격 안내로 본다
@@ -161,6 +181,7 @@ def count_members(
     custom_whitelist: list[str] | None = None,
     min_text_height: float | None = None,
     exclude_with_spec: bool = False,
+    treat_slash_as_combo: bool = False,
 ) -> tuple[Counter, list[tuple[float, float, str]], dict[str, list[tuple[float, float]]]]:
     """
     Parameters
@@ -190,7 +211,9 @@ def count_members(
         )
     else:
         whitelist_set = set(custom_whitelist)
-        match_fn = lambda t: match_symbol(t, whitelist_set, exclude_with_spec)
+        match_fn = lambda t: match_symbol(
+            t, whitelist_set, exclude_with_spec, treat_slash_as_combo
+        )
 
     doc = ezdxf.readfile(dxf_path)
     msp = doc.modelspace()

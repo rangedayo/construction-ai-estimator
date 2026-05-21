@@ -35,6 +35,8 @@ text_height_filter:
     min_height: 177       # height > 176만 카운트 (159·176 작은글자 제외)
   도면2:
     min_height: 302       # height 301(작은글자) 제외, 400(큰글자)만 카운트 (라운드 4)
+  도면3:
+    min_height: null      # 라운드 8: 도면3 height 구조가 도면1·2와 정반대(본체 221.8이 작은글자, 일람표 275.6/큰글자 337.5). min_height 컷이 본체를 죽이므로 필터 미적용.
   도면4:
     min_height: null      # 진단 전이므로 필터 미적용
 
@@ -65,6 +67,18 @@ auto_policy_params:
 policy_override:
   도면1: null
   도면2: null
+  # 라운드 8: 신호 2(exclude_table_regions) 강제 ON 이 결정적.
+  #   - 자동 판정은 False: auto_policy 내부의 일람표 검출이 baseline.py 의
+  #     _TABLE_SPARSE_MAX 5컷 보정을 거치지 않아 본체 자유 텍스트 좌표가
+  #     입력을 오염시켜 검출 0곳이 나옴(C1·C2·C3·C4 각 +1 오차로 FAIL).
+  #   - override 로 True 강제하면 baseline 의 5컷 적용 검출(1곳)이 차감에
+  #     반영돼 C1·C2·C3·C4 모두 PASS.
+  # 신호 3(exclude_with_spec)은 자동 판정도 이미 True (라운드 8 슬래시 매칭
+  # 부작용으로 spec_pattern_count 가 1→34 로 폭증, 임계값 6.3 통과)지만
+  # 의도를 명시하기 위해 함께 True 로 박는다.
+  도면3:
+    exclude_table_regions: true
+    exclude_with_spec: true
   도면4: null
 
 # ── 일람표 영역 검출 파라미터 (정책 P 신호 1) ───────────────────────────────

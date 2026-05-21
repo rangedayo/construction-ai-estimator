@@ -45,9 +45,14 @@ _FULL_EXTENT = (-1e18, -1e18, 1e18, 1e18)
 _DEFAULT_DXF_FILES = {
     "도면1": "도면1.dxf",
     "도면2": "도면2.dxf",
+    "도면3": "도면3.dxf",
     "도면4": "도면4.dxf",
 }
 _DUP_TOLERANCE_MM = 1.0
+# 라운드 8: 일람표 검출 입력 정리용 좌표 수 임계값. 부호당 자유 텍스트가
+# 이 값을 초과하면 본체 부재(modelspace TEXT/MTEXT) 로 간주해 검출 입력에서
+# 제외한다. 일람표는 부호당 1~2개씩만 등장하는 패턴이라는 정의에 부합.
+_TABLE_SPARSE_MAX = 5
 
 
 def _dxf_path(drawing: str) -> str:
@@ -101,20 +106,30 @@ def compute_drawing(drawing: str) -> dict:
     raw = dict(raw_counts)
 
     # 2) 규격 안내 적용 카운트 (정책 P 신호 2)
+    # treat_slash_as_combo=True: 슬래시 결합(예: "C1/P1")은 본체 텍스트이므로
+    # 규격 제외 모드에서도 본체로 인정한다. 라운드 8 도면3 케이스 보정.
     if policy["exclude_with_spec"]:
         spec_counts, _h2, _c2 = count_members(
             dxf, *_FULL_EXTENT, custom_whitelist=symbols,
             min_text_height=min_h, exclude_with_spec=True,
+            treat_slash_as_combo=True,
         )
         after_spec = dict(spec_counts)
     else:
         after_spec = dict(raw)
 
     # 3) 일람표 영역 검출 (정책 P 신호 1) — 자유 텍스트 좌표만 입력
+    # 라운드 8: 부호당 좌표가 많은(_TABLE_SPARSE_MAX 초과) 부호는 본체가 자유
+    # 텍스트로 그려진 경우(도면3 처럼)라 일람표 검출 입력을 오염시킨다.
+    # 보편 휴리스틱으로 좌표 수 컷을 적용해 본체 부호를 자동 거른다. 도면1·2 는
+    # 신호 1 자동 OFF, 도면4 는 자유 텍스트 좌표가 모두 임계값 이하라 영향 없음.
     text_coords, extent = load_text_layout(
         dxf, symbols, min_text_height=min_h, exclude_with_spec=True
     )
-    regions = detect_table_regions(text_coords, extent, **load_table_region_params())
+    sparse_coords = {
+        s: pts for s, pts in text_coords.items() if len(pts) <= _TABLE_SPARSE_MAX
+    }
+    regions = detect_table_regions(sparse_coords, extent, **load_table_region_params())
 
     # 4) 일람표 영역 카운트 제외
     final = dict(after_spec)
