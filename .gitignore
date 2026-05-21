@@ -33,8 +33,5 @@ desktop.ini
 sample_data/
 reference_materials/
 
-# 프롬프트 파일 (작업 지시문 — git 추적 제외, 로컬 보관)
-*prompt*.md
-
 # 임시 파일
 *.tmp
