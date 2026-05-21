@@ -32,6 +32,7 @@ for _path in (_POC_DIR, _HERE):
 
 from baseline import compute_drawing, _dxf_path  # noqa: E402
 from counter import _clean_mtext, match_symbol  # noqa: E402
+from ground_truth import drawing_symbol_totals  # noqa: E402
 
 
 @dataclass(frozen=True)
@@ -48,6 +49,10 @@ class _TextRecord:
 def classify_drawing_texts(drawing: str) -> list[dict]:
     """도면의 모든 텍스트를 baseline 룰로 분류해 좌표·라벨 형태로 반환.
 
+    화이트리스트는 정답지 기둥 시트(category="기둥") 부호로 한정한다.
+    test_regression.py 와 동일 범위 — 보 부호는 본 함수에서 not_whitelist
+    로 빠진다. 라운드 11 이후 보 부재 확장 시 별도 함수로 재사용 가능.
+
     Parameters
     ----------
     drawing
@@ -61,8 +66,8 @@ def classify_drawing_texts(drawing: str) -> list[dict]:
     """
     dxf = _dxf_path(drawing)
     result = compute_drawing(drawing)
-    expected_symbols = sorted(result["expected"].keys())
-    whitelist = set(expected_symbols)
+    column_totals = drawing_symbol_totals(category="기둥", drawings=[drawing])
+    whitelist = set((column_totals.get(drawing) or {}).keys())
     policy = result["policy"]
     min_h = result["min_h"]
     regions = result["regions"]

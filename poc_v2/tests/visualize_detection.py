@@ -1,21 +1,26 @@
-"""분류 시각화 도구 (라운드 10) — DXF 기하 + 분류별 마커 오버레이 HTML.
+"""분류 시각화 도구 (라운드 10-2) — DXF 기하 + 분류별 마커 오버레이 HTML.
 
 poc_v3/app.py 의 parse_dxf_for_plotly + build_dxf_figure 를 베이스로 확장.
 Streamlit 의존성 제거, ezdxf + plotly 만 사용. 도면 5장 모두 standalone
 HTML 로 출력 (브라우저에서 바로 열림).
 
+분석 범위는 **기둥 부재만**. 보 부재는 라운드 11 이후 별도 시각화로 확장 예정
+(`_보.html`). 본 도구는 회귀 테스트(category="기둥")와 동일 화이트리스트 사용.
+
 사용법:
-    python poc_v2/tests/visualize_detection.py            # 5개 도면 전부
-    python poc_v2/tests/visualize_detection.py 도면3      # 한 도면만
+    python poc_v2/tests/visualize_detection.py            # 5개 도면 전부 + 자동 오픈
+    python poc_v2/tests/visualize_detection.py 도면3      # 한 도면만 + 자동 오픈
+    python poc_v2/tests/visualize_detection.py --no-open  # 자동 오픈 비활성
 
 출력:
-    outputs/visualize/도면N_detection.html  × 5
+    outputs/visualize/도면N_detection_기둥.html  × 5
 """
 from __future__ import annotations
 
 import math
 import os
 import sys
+import webbrowser
 from collections import Counter
 
 import ezdxf
@@ -30,7 +35,11 @@ for _path in (_POC_DIR, _HERE):
 from baseline import compute_drawing, _dxf_path  # noqa: E402
 from classify_text import classify_drawing_texts  # noqa: E402
 from counter import _clean_mtext  # noqa: E402
-from ground_truth import PROJECT_ROOT, within_tolerance  # noqa: E402
+from ground_truth import (  # noqa: E402
+    PROJECT_ROOT,
+    drawing_symbol_totals,
+    within_tolerance,
+)
 
 _ARC_N = 48
 _OUTPUT_DIR = os.path.join(PROJECT_ROOT, "outputs", "visualize")
@@ -253,8 +262,15 @@ def _add_category_markers(fig: go.Figure, classified: list[dict]) -> None:
         ))
 
 
-def _add_region_boxes(fig: go.Figure, regions: list[dict]) -> None:
-    """일람표 영역 bbox 를 빨간 점선 사각형 + 라벨로 표시."""
+def _add_region_boxes(
+    fig: go.Figure, regions: list[dict], column_whitelist: set[str]
+) -> None:
+    """일람표 영역 bbox 를 빨간 점선 사각형 + 라벨로 표시.
+
+    라벨에는 기둥 부호만 노출한다. region 자체는 baseline 의 전체 화이트리스트
+    기반으로 검출되므로 보 부호로만 구성된 region 도 존재할 수 있다 — 그 경우
+    "(기둥 부호 없음)" 으로 표기해 시각적 맥락을 유지한다.
+    """
     for i, region in enumerate(regions):
         x0, y0, x1, y1 = region["bbox"]
         fig.add_shape(
@@ -264,9 +280,13 @@ def _add_region_boxes(fig: go.Figure, regions: list[dict]) -> None:
             fillcolor="rgba(255, 0, 0, 0.05)",
             layer="below",
         )
-        syms = ", ".join(
-            f"{s}({n})" for s, n in sorted(region["symbols"].items())
-        )
+        column_syms = {
+            s: n for s, n in region["symbols"].items() if s in column_whitelist
+        }
+        if column_syms:
+            syms = ", ".join(f"{s}({n})" for s, n in sorted(column_syms.items()))
+        else:
+            syms = "(기둥 부호 없음)"
         fig.add_annotation(
             x=x0, y=y1,
             xanchor="left", yanchor="bottom",
@@ -279,15 +299,31 @@ def _add_region_boxes(fig: go.Figure, regions: list[dict]) -> None:
         )
 
 
+def _column_expected(drawing: str) -> dict[str, int]:
+    """기둥 정답지 합계 (분석 대상 범위) — 회귀 테스트와 동일."""
+    totals = drawing_symbol_totals(category="기둥", drawings=[drawing])
+    return totals.get(drawing) or {}
+
+
+def _status_label(pred: int, exp: int) -> str:
+    """예측·정답 비교 → PASS / PASS (±1) / FAIL 라벨."""
+    if pred == exp:
+        return "PASS"
+    if within_tolerance(pred, exp):
+        return "PASS (±1)"
+    return "FAIL"
+
+
 def _build_summary_text(drawing: str, result: dict) -> str:
-    """플롯 모서리에 표시할 정답 비교 박스 텍스트 (HTML)."""
+    """플롯 모서리에 표시할 정답 비교 박스 텍스트 (HTML) — 기둥 부호만."""
     policy = result["policy"]
-    expected = result["expected"]
     final = result["final"]
+    expected = _column_expected(drawing)
     source = result["policy_source"]
 
     header = (
-        f"<b>{drawing}</b> — policy[{source}]: "
+        f"<b>{drawing} — 기둥 부재</b><br>"
+        f"policy[{source}]: "
         f"exclude_table={policy['exclude_table_regions']}, "
         f"exclude_with_spec={policy['exclude_with_spec']}"
     )
@@ -297,9 +333,8 @@ def _build_summary_text(drawing: str, result: dict) -> str:
         pred = final.get(symbol, 0)
         exp = expected[symbol]
         diff = pred - exp
-        ok = within_tolerance(pred, exp)
         rows.append(
-            f"{symbol:<6}{pred:>6}{exp:>6}{diff:>+6}  {'PASS' if ok else 'FAIL'}"
+            f"{symbol:<6}{pred:>6}{exp:>6}{diff:>+6}  {_status_label(pred, exp)}"
         )
     rows.append("</span>")
     return header + "<br>" + "<br>".join(rows)
@@ -327,15 +362,16 @@ def _build_figure(drawing: str) -> go.Figure:
     geo = parse_dxf_geometry(dxf)
     result = compute_drawing(drawing)
     classified = classify_drawing_texts(drawing)
+    column_whitelist = set(_column_expected(drawing).keys())
 
     fig = go.Figure()
     _add_geometry(fig, geo)
-    _add_region_boxes(fig, result["regions"])
+    _add_region_boxes(fig, result["regions"], column_whitelist)
     _add_category_markers(fig, classified)
     _add_summary_annotation(fig, drawing, result)
 
     fig.update_layout(
-        title=f"{drawing} — 분류 시각화 (라운드 10)",
+        title=f"{drawing} — 기둥 부재 분류 시각화 (라운드 10-2)",
         height=900,
         paper_bgcolor="white",
         plot_bgcolor="white",
@@ -356,10 +392,10 @@ def _build_figure(drawing: str) -> go.Figure:
 
 
 def visualize_drawing(drawing: str, out_dir: str = _OUTPUT_DIR) -> str:
-    """한 도면을 standalone HTML 로 저장하고 경로 반환."""
+    """한 도면을 standalone HTML 로 저장하고 경로 반환 (기둥 부재 한정)."""
     os.makedirs(out_dir, exist_ok=True)
     fig = _build_figure(drawing)
-    out_path = os.path.join(out_dir, f"{drawing}_detection.html")
+    out_path = os.path.join(out_dir, f"{drawing}_detection_기둥.html")
     fig.write_html(
         out_path,
         include_plotlyjs="cdn",
@@ -378,13 +414,25 @@ def category_counts(drawing: str) -> Counter:
     return Counter(r["category"] for r in classified)
 
 
+def _parse_args(argv: list[str]) -> tuple[list[str], bool]:
+    """CLI 인자 파싱 — 도면 인자 + --no-open 플래그 분리."""
+    auto_open = True
+    drawings: list[str] = []
+    for arg in argv:
+        if arg == "--no-open":
+            auto_open = False
+        else:
+            drawings.append(arg)
+    if not drawings:
+        drawings = list(_ALL_DRAWINGS)
+    return drawings, auto_open
+
+
 def main() -> None:
     sys.stdout.reconfigure(encoding="utf-8")
-    if len(sys.argv) > 1:
-        targets = [sys.argv[1]]
-    else:
-        targets = list(_ALL_DRAWINGS)
+    targets, auto_open = _parse_args(sys.argv[1:])
 
+    generated: list[str] = []
     for drawing in targets:
         if drawing not in _ALL_DRAWINGS:
             print(f"[오류] 알 수 없는 도면: {drawing}  (사용 가능: {list(_ALL_DRAWINGS)})")
@@ -396,6 +444,13 @@ def main() -> None:
             f"{c}={counts.get(c, 0)}" for c in _CATEGORY_ORDER
         )
         print(f"{rel} 생성  ({summary})")
+        generated.append(out)
+
+    if auto_open and generated:
+        first = os.path.abspath(generated[0])
+        url = "file:///" + first.replace("\\", "/")
+        print(f"브라우저로 오픈: {url}")
+        webbrowser.open(url)
 
 
 if __name__ == "__main__":
