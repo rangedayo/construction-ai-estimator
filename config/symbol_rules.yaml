@@ -39,6 +39,9 @@ text_height_filter:
     min_height: null      # 라운드 8: 도면3 height 구조가 도면1·2와 정반대(본체 221.8이 작은글자, 일람표 275.6/큰글자 337.5). min_height 컷이 본체를 죽이므로 필터 미적용.
   도면4:
     min_height: null      # 진단 전이므로 필터 미적용
+  도면5:
+    min_height: null      # 라운드 9: 본체(448.0) ↔ 일람표(413.4) 갭 34.6 으로
+                          # 분리 깨끗하지 않음 (라운드 6 D항 원칙). 자동 정책으로 4/4 PASS.
 
 # ── 라운드 6: policy_p 도면별 분기 폐기 → 신호 2·3 자동 판단으로 대체 ────────
 # 라운드 5 의 policy_p 도면별 수동 분기는 auto_policy.auto_detect_policy 가
@@ -81,6 +84,11 @@ policy_override:
     exclude_table_regions: true
     exclude_with_spec: true
   도면4: null
+  도면5: null  # 라운드 9: 자동 판정이 정확 작동 (사전 진단 6 비재현 확정).
+               # 도면3와 본체 표기는 동형(슬래시 결합)이지만, auto_policy 의
+               # exclude_with_spec=True 필터링으로 자유 텍스트 입력이 깨끗 →
+               # _TABLE_SPARSE_MAX=5 보정 부재의 영향을 받지 않음 → 신호 2 자동 ON.
+               # 라운드 6 D항·라운드 8 H항 인계 메모대로 "도면3 특수성 확정 / override 유지".
 
 # ── 일람표 영역 검출 파라미터 (정책 P 신호 1) ───────────────────────────────
 # region_size_ratio    : 그리드 셀 크기 = 도면 폭 × 이 비율
