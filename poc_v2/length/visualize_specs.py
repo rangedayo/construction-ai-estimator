@@ -100,6 +100,18 @@ def _collect_section_labels(dxf_path: str) -> list[tuple[float, float, str]]:
     return out
 
 
+def _location_label(ex: SpecExtraction) -> str:
+    """위치 라벨 — 동(section) 우선, 없으면 출처 시트, 둘 다 없으면 '-'."""
+    return ex.section or ex.source_sheet or "-"
+
+
+def _symbol_label(ex: SpecExtraction) -> str:
+    """마커 텍스트 — 부호 + 위치(동 또는 출처 시트). section None 이면 '(-)' 대신
+    출처 시트를 보여 도면4 1층/지붕층 등 중복이 눈으로 구분되게 한다."""
+    loc = ex.section or ex.source_sheet
+    return f"{ex.symbol}<br>({loc})" if loc else ex.symbol
+
+
 def _build_figure(
     drawing: str,
     dxf_path: str,
@@ -139,12 +151,14 @@ def _build_figure(
             mode="markers+text",
             marker=dict(symbol="circle", color="#2ca02c", size=10,
                         line=dict(color="#0a4a0a", width=1)),
-            text=[f"{ex.symbol}<br>({ex.section or '-'})" for ex in extractions],
+            text=[_symbol_label(ex) for ex in extractions],
             textposition="top center",
             textfont=dict(size=9, color="#0a4a0a"),
             hovertext=[
-                f"{ex.drawing} / {ex.section or '-'} / {ex.symbol}<br>"
-                f"규격: {ex.spec_normalized}" for ex in extractions
+                f"{ex.drawing} / {_location_label(ex)} / {ex.symbol}<br>"
+                f"규격: {ex.spec_normalized} ({ex.spec_raw})<br>"
+                f"출처표: {ex.source_table_title or '-'}"
+                for ex in extractions
             ],
             hoverinfo="text",
             name="부호", legendgroup="symbol",
