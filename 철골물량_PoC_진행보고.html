@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>철골 물량 산출 PoC — 진행 보고</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Gowun+Dodum&family=IBM+Plex+Sans+KR:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+
+:root{
+  --ink:#1a1d21;
+  --ink-soft:#4a5159;
+  --ink-faint:#8a9099;
+  --paper:#f4f1ea;
+  --paper-2:#ebe7dc;
+  --card:#fffefb;
+  --line:#d9d4c7;
+  --steel:#2d4a63;
+  --steel-2:#3d6489;
+  --rust:#b85c38;
+  --rust-soft:#d98b6a;
+  --green:#4a7a4a;
+  --amber:#c08a2d;
+  --blue-fill:#e8eef4;
+  --green-fill:#e6efe4;
+  --amber-fill:#f6ecd6;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+html{scroll-behavior:smooth;}
+body{
+  font-family:'IBM Plex Sans KR',sans-serif;
+  background:var(--paper);
+  color:var(--ink);
+  line-height:1.7;
+  font-weight:300;
+  -webkit-font-smoothing:antialiased;
+}
+.mono{font-family:'IBM Plex Mono',monospace;}
+
+/* blueprint grid backdrop */
+body::before{
+  content:"";position:fixed;inset:0;z-index:0;pointer-events:none;
+  background-image:linear-gradient(rgba(45,74,99,.035) 1px,transparent 1px),
+                   linear-gradient(90deg,rgba(45,74,99,.035) 1px,transparent 1px);
+  background-size:32px 32px;
+}
+.wrap{position:relative;z-index:1;max-width:1080px;margin:0 auto;padding:0 28px;}
+
+/* ── HERO ── */
+header{padding:72px 0 48px;border-bottom:2px solid var(--ink);position:relative;}
+.kicker{
+  font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:.28em;
+  text-transform:uppercase;color:var(--rust);font-weight:500;margin-bottom:20px;
+}
+h1{
+  font-family:'IBM Plex Sans KR',sans-serif;font-weight:700;
+  font-size:clamp(30px,4.6vw,50px);line-height:1.15;letter-spacing:-.02em;
+  color:var(--ink);margin-bottom:18px;
+}
+h1 .accent{color:var(--steel);}
+.lead{font-size:17px;color:var(--ink-soft);max-width:680px;font-weight:400;}
+.formula{
+  margin-top:28px;display:inline-flex;align-items:center;gap:14px;flex-wrap:wrap;
+  background:var(--ink);color:var(--paper);padding:16px 24px;border-radius:4px;
+  font-family:'IBM Plex Mono',monospace;font-size:15px;font-weight:500;letter-spacing:.02em;
+}
+.formula .op{color:var(--rust-soft);}
+.formula .done{color:#9fd99f;}
+.formula .pending{color:var(--ink-faint);text-decoration:line-through;text-decoration-thickness:1px;}
+
+/* section scaffolding */
+section{padding:60px 0;border-bottom:1px solid var(--line);}
+.sec-num{
+  font-family:'IBM Plex Mono',monospace;font-size:13px;color:var(--rust);
+  font-weight:600;letter-spacing:.1em;
+}
+.sec-title{
+  font-size:clamp(22px,3vw,30px);font-weight:700;letter-spacing:-.01em;
+  margin:6px 0 8px;color:var(--ink);
+}
+.sec-sub{color:var(--ink-soft);font-size:15.5px;max-width:760px;margin-bottom:36px;font-weight:400;}
+
+/* ── MEASUREMENT 3 CARDS ── */
+.cards{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;}
+.card{
+  background:var(--card);border:1px solid var(--line);border-radius:8px;
+  padding:24px 22px;position:relative;overflow:hidden;
+  transition:transform .25s ease,box-shadow .25s ease;
+}
+.card:hover{transform:translateY(-4px);box-shadow:0 14px 30px rgba(45,74,99,.12);}
+.card .tag{
+  font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--ink-faint);font-weight:500;
+}
+.card h3{font-size:20px;font-weight:700;margin:8px 0 4px;color:var(--steel);}
+.card .what{font-size:13.5px;color:var(--ink-soft);min-height:42px;font-weight:400;}
+.card .stat{
+  margin-top:16px;padding-top:14px;border-top:1px dashed var(--line);
+  display:flex;align-items:baseline;gap:8px;
+}
+.card .stat .big{font-family:'IBM Plex Mono',monospace;font-size:30px;font-weight:600;color:var(--ink);}
+.card .stat .lbl{font-size:12.5px;color:var(--ink-faint);}
+.card .ribbon{position:absolute;top:14px;right:-30px;background:var(--green);color:#fff;
+  font-size:11px;font-weight:600;letter-spacing:.08em;padding:3px 36px;transform:rotate(45deg);}
+.card .err{font-size:12px;color:var(--green);font-weight:500;margin-top:6px;}
+
+/* ── STRATEGY: universal vs per-drawing ── */
+.split{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:8px;}
+.panel{border-radius:8px;padding:24px 22px;border:1px solid var(--line);}
+.panel.uni{background:var(--green-fill);border-color:#bcd3b8;}
+.panel.var{background:var(--amber-fill);border-color:#e3cd9a;}
+.panel .ph{display:flex;align-items:center;gap:10px;margin-bottom:6px;}
+.panel .dot{width:11px;height:11px;border-radius:50%;}
+.uni .dot{background:var(--green);}
+.var .dot{background:var(--amber);}
+.panel h4{font-size:17px;font-weight:700;color:var(--ink);}
+.panel .pd{font-size:13px;color:var(--ink-soft);margin-bottom:16px;font-weight:400;}
+.uni .pd b,.var .pd b{font-weight:600;}
+.rules{list-style:none;display:flex;flex-direction:column;gap:9px;}
+.rules li{
+  background:rgba(255,255,255,.6);border-radius:5px;padding:9px 12px;font-size:13px;
+  display:flex;gap:10px;align-items:flex-start;
+}
+.rules li .rk{font-family:'IBM Plex Mono',monospace;font-size:11.5px;font-weight:600;
+  color:var(--ink);background:#fff;border:1px solid var(--line);border-radius:3px;
+  padding:1px 6px;white-space:nowrap;flex-shrink:0;}
+.rules li .rv{color:var(--ink-soft);font-weight:400;}
+
+/* drawing diversity strip */
+.diversity{margin-top:28px;background:var(--card);border:1px solid var(--line);border-radius:8px;overflow:hidden;}
+.diversity .dh{background:var(--steel);color:var(--paper);padding:12px 20px;font-size:13.5px;font-weight:500;
+  display:flex;justify-content:space-between;align-items:center;}
+.diversity .dh .badge{font-family:'IBM Plex Mono',monospace;font-size:11px;background:rgba(255,255,255,.15);
+  padding:2px 8px;border-radius:3px;letter-spacing:.05em;}
+table{width:100%;border-collapse:collapse;font-size:13px;}
+th,td{padding:10px 16px;text-align:left;border-bottom:1px solid var(--line);}
+th{font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-faint);font-weight:600;background:var(--paper-2);}
+td{color:var(--ink-soft);font-weight:400;}
+td.dn{font-weight:600;color:var(--ink);font-family:'IBM Plex Mono',monospace;}
+td .chip{display:inline-block;font-size:11px;padding:1px 7px;border-radius:3px;font-weight:500;}
+.chip.y{background:var(--green-fill);color:var(--green);}
+.chip.n{background:#f0ebe0;color:var(--ink-faint);}
+tr:last-child td{border-bottom:none;}
+
+/* style-3 strip */
+.style-group{border-top:1px solid var(--line);}
+.sg-label{font-size:11.5px;font-family:'IBM Plex Mono',monospace;letter-spacing:.08em;color:var(--ink-faint);font-weight:600;padding:12px 20px 0;}
+.style3{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--line);margin-top:12px;}
+.scol{background:var(--card);padding:18px 20px;}
+.stag{font-size:12px;color:var(--ink-faint);font-weight:500;margin-bottom:8px;}
+.sval{font-size:15px;font-weight:500;color:var(--steel);letter-spacing:.01em;}
+.style-note{padding:16px 20px;font-size:13px;color:var(--ink-soft);background:var(--paper-2);border-top:1px solid var(--line);font-weight:400;}
+.style-note b{font-weight:600;color:var(--ink);}
+
+/* regression table */
+.regr{margin-top:28px;background:var(--card);border:1px solid var(--line);border-radius:8px;overflow:hidden;}
+.regr-head{padding:18px 22px;border-bottom:1px solid var(--line);}
+.regr-head h4{font-size:15px;font-weight:600;color:var(--ink);margin-bottom:4px;}
+.regr-head p{font-size:12.5px;color:var(--ink-soft);font-weight:400;}
+.rtab td.rstage{font-weight:600;color:var(--steel);font-family:'IBM Plex Mono',monospace;font-size:12px;width:64px;}
+.regr-foot{padding:14px 22px;font-size:12.5px;color:var(--ink-soft);background:var(--paper-2);border-top:1px solid var(--line);font-weight:400;}
+.regr-foot code{font-family:'IBM Plex Mono',monospace;font-size:11.5px;background:var(--card);padding:1px 5px;border-radius:3px;color:var(--steel);}
+
+/* LLM input feed cards */
+.feed{margin-top:22px;}
+.feed-title{font-size:13px;font-weight:600;color:var(--ink);margin-bottom:12px;}
+.feed-row{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;}
+.feed-card{background:var(--card);border:1px solid var(--line);border-top:3px solid var(--steel);border-radius:0 0 6px 6px;padding:16px 18px;position:relative;}
+.feed-card .fn{font-family:'IBM Plex Mono',monospace;font-size:13px;font-weight:600;color:var(--steel);}
+.feed-card h5{font-size:14.5px;font-weight:600;color:var(--ink);margin:4px 0 6px;}
+.feed-card p{font-size:12.5px;color:var(--ink-soft);font-weight:400;line-height:1.6;}
+.feed-card p b{font-weight:600;color:var(--steel);}
+.feed-note{margin-top:14px;font-size:12.5px;color:var(--ink-soft);background:var(--amber-fill);border-left:3px solid var(--amber);border-radius:0;padding:12px 16px;font-weight:400;}
+
+/* big flow svg */
+.bigflow{margin-top:32px;background:var(--card);border:1px solid var(--line);border-radius:8px;padding:22px 24px 8px;}
+.bf-title{font-size:14px;font-weight:600;color:var(--ink);margin-bottom:8px;}
+.bigflow svg{width:100%;height:auto;display:block;}
+.bf-note{font-size:13px;color:var(--ink-soft);font-weight:400;padding:8px 0 14px;line-height:1.6;}
+.bf-note b{font-weight:600;color:var(--steel);}
+
+/* ── SAFETY / non-automatable ── */
+.boxrow{display:grid;grid-template-columns:1fr 1fr 1fr;gap:18px;margin-top:8px;}
+.sbox{background:var(--card);border:1px solid var(--line);border-left:3px solid var(--steel);border-radius:6px;padding:20px;}
+.sbox.solved{border-left-color:var(--green);}
+.sbox.human{border-left-color:var(--rust);}
+.sbox .st{font-size:11px;font-family:'IBM Plex Mono',monospace;letter-spacing:.12em;text-transform:uppercase;font-weight:600;margin-bottom:10px;}
+.solved .st{color:var(--green);}
+.human .st{color:var(--rust);}
+.sbox h4{font-size:15px;font-weight:600;margin-bottom:8px;color:var(--ink);}
+.sbox p{font-size:13px;color:var(--ink-soft);font-weight:400;}
+.sbox p code{font-family:'IBM Plex Mono',monospace;font-size:12px;background:var(--paper-2);padding:1px 5px;border-radius:3px;color:var(--steel);}
+
+/* principle ribbon */
+.principle{margin-top:30px;background:var(--ink);color:var(--paper);border-radius:8px;padding:24px 28px;
+  display:flex;align-items:center;gap:20px;}
+.principle .pq{font-family:'Gowun Dodum',serif;font-size:21px;font-weight:400;line-height:1.4;letter-spacing:.01em;}
+.principle .pq b{color:var(--rust-soft);font-weight:400;}
+.principle .pl{font-size:12px;color:var(--ink-faint);font-family:'IBM Plex Mono',monospace;letter-spacing:.1em;
+  border-right:1px solid #3a4047;padding-right:20px;white-space:nowrap;}
+
+/* ── VISION: human -> LLM pipeline ── */
+.pipe{margin-top:10px;}
+.pipe-row{display:grid;grid-template-columns:1fr auto 1fr;align-items:stretch;gap:0;margin-bottom:14px;}
+.pipe-now,.pipe-future{border-radius:8px;padding:20px 22px;}
+.pipe-now{background:var(--card);border:1px solid var(--line);}
+.pipe-future{background:var(--steel);color:var(--paper);}
+.pipe-arrow{display:flex;align-items:center;justify-content:center;padding:0 18px;color:var(--rust);font-size:30px;}
+.pipe-lbl{font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.14em;text-transform:uppercase;font-weight:600;margin-bottom:10px;}
+.pipe-now .pipe-lbl{color:var(--ink-faint);}
+.pipe-future .pipe-lbl{color:var(--rust-soft);}
+.pipe-now h4,.pipe-future h4{font-size:16px;font-weight:600;margin-bottom:6px;}
+.pipe-now p,.pipe-future p{font-size:13px;font-weight:400;}
+.pipe-now p{color:var(--ink-soft);}
+.pipe-future p{color:#cdd6df;}
+
+/* flow steps */
+.flow{display:grid;grid-template-columns:repeat(5,1fr);gap:0;margin-top:34px;position:relative;}
+.flow .step{text-align:center;padding:0 8px;position:relative;}
+.flow .step .circ{
+  width:54px;height:54px;border-radius:50%;margin:0 auto 12px;display:flex;align-items:center;justify-content:center;
+  font-family:'IBM Plex Mono',monospace;font-weight:600;font-size:18px;position:relative;z-index:2;
+  background:var(--card);border:2px solid var(--steel);color:var(--steel);
+}
+.flow .step.llm .circ{background:var(--steel);color:#fff;border-color:var(--steel);}
+.flow .step.human .circ{background:var(--rust);color:#fff;border-color:var(--rust);}
+.flow .step.out .circ{background:var(--green);color:#fff;border-color:var(--green);}
+.flow .step .sn{font-size:13.5px;font-weight:600;color:var(--ink);margin-bottom:3px;}
+.flow .step .sd{font-size:11.5px;color:var(--ink-faint);font-weight:400;line-height:1.45;}
+.flow .step .who{font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.1em;text-transform:uppercase;
+  font-weight:600;margin-top:7px;padding:2px 8px;border-radius:10px;display:inline-block;}
+.flow .step.llm .who{background:var(--blue-fill);color:var(--steel-2);}
+.flow .step.human .who{background:#f6e3da;color:var(--rust);}
+.flow .step.out .who{background:var(--green-fill);color:var(--green);}
+.flow::before{content:"";position:absolute;top:27px;left:10%;right:10%;height:2px;
+  background:repeating-linear-gradient(90deg,var(--line) 0 8px,transparent 8px 14px);z-index:1;}
+.click-hint{font-size:12px;color:var(--ink-faint);text-align:center;margin-top:24px;font-family:'IBM Plex Mono',monospace;letter-spacing:.05em;}
+
+/* footer */
+footer{padding:40px 0 70px;text-align:center;}
+.foot-formula{font-family:'IBM Plex Mono',monospace;font-size:14px;color:var(--ink-soft);}
+.foot-formula .hi{color:var(--rust);font-weight:600;}
+
+.reveal{opacity:0;transform:translateY(20px);transition:opacity .7s ease,transform .7s ease;}
+.reveal.in{opacity:1;transform:none;}
+
+@media(max-width:860px){
+  .cards,.boxrow{grid-template-columns:1fr;}
+  .split{grid-template-columns:1fr;}
+  .style3,.feed-row{grid-template-columns:1fr;}
+  .flow{grid-template-columns:1fr 1fr 1fr;gap:24px 0;}
+  .flow::before{display:none;}
+  .pipe-row{grid-template-columns:1fr;}
+  .pipe-arrow{transform:rotate(90deg);padding:8px 0;}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="kicker">건설 도면 물량 산출 PoC · 진행 보고</div>
+  <h1>도면에서 철골 부재를<br><span class="accent">측정</span>하는 3개의 엔진을 완성했습니다</h1>
+  <p class="lead">회사마다 도면 규칙과 표기 스타일이 다릅니다. 그 차이를 가능한 한 <b>보편 룰</b>로 묶고, 룰로 안 풀리는 부분만 골라 코드로 보완했습니다. 지금까지의 결과와, 사람이 쓰던 설정을 LLM이 채우게 만드는 다음 단계를 정리했습니다.</p>
+  <div class="formula">
+    <span>총중량(kg)</span><span class="op">=</span>
+    <span class="done">개수</span><span class="op">×</span>
+    <span class="done">길이</span><span class="op">×</span>
+    <span class="done">규격</span><span class="op">→</span>
+    <span class="pending">단위중량</span>
+  </div>
+</header>
+
+<!-- SECTION 1 : MEASUREMENT 3 -->
+<section class="reveal">
+  <div class="sec-num">01 / 성과</div>
+  <div class="sec-title">측정 3종 — 어디까지 됐나</div>
+  <p class="sec-sub">총중량은 네 값의 곱입니다. 그중 도면에서 직접 읽어야 하는 <b>개수·길이·규격</b> 세 가지 측정을 모두 구현했고, 정답지로 회귀 검증까지 마쳤습니다.</p>
+  <div class="cards">
+    <div class="card">
+      <div class="ribbon">DONE</div>
+      <div class="tag">1단계 · Count</div>
+      <h3>부호별 개수</h3>
+      <p class="what">도면 전체에서 부호(MC1·SC1·BR2…)를 종류별로 합계 카운트.</p>
+      <div class="stat"><span class="big">14/16</span><span class="lbl">회귀 PASS</span></div>
+      <div class="err">잔여 2건은 분리 TEXT 등 알려진 부채</div>
+    </div>
+    <div class="card">
+      <div class="ribbon">DONE</div>
+      <div class="tag">길이-1 · Length</div>
+      <h3>기둥 길이</h3>
+      <p class="what">단면도의 세로 DIMENSION measurement 최댓값을 채택.</p>
+      <div class="stat"><span class="big">16/16</span><span class="lbl">회귀 PASS</span></div>
+      <div class="err">평균 오차 0&nbsp;mm</div>
+    </div>
+    <div class="card">
+      <div class="ribbon">DONE</div>
+      <div class="tag">규격-1 · Spec</div>
+      <h3>부재 규격</h3>
+      <p class="what">일람표의 부호↔규격(H-588×300…)을 좌표로 페어링, 출처까지 보존.</p>
+      <div class="stat"><span class="big">105</span><span class="lbl">건 전수 추출</span></div>
+      <div class="err">기둥 규격 정답 일치 · 보 부호도 보존</div>
+    </div>
+  </div>
+</section>
+
+<!-- SECTION 2 : STRATEGY -->
+<section class="reveal">
+  <div class="sec-num">02 / 전략</div>
+  <div class="sec-title">도면마다 다른데, 어떻게 보편화했나</div>
+  <p class="sec-sub">모든 도면에 그대로 통하는 규칙은 <b>코드에 한 번만</b> 박고, 도면마다 달라지는 값만 따로 떼어 <b>설정(yaml)</b>으로 분리했습니다. 이 경계선이 자동화의 핵심입니다.</p>
+  <div class="split">
+    <div class="panel uni">
+      <div class="ph"><span class="dot"></span><h4>보편 룰 — 코드에 고정</h4></div>
+      <p class="pd">정답지 없이도 <b>모든 도면에 그대로</b> 작동. 회사가 달라도 안 바뀜.</p>
+      <ul class="rules">
+        <li><span class="rk">정규식</span><span class="rv">부호·규격 패턴 (H형강 4세그먼트 등) — KS·표 형식은 회사 무관</span></li>
+        <li><span class="rk">제외 prefix</span><span class="rv">F·HD·THK·X·Y… 적산 외 부재 자동 차감</span></li>
+        <li><span class="rk">DIMENSION</span><span class="rv">세로/가로 방향 판별 기하 — 도면 무관 보편</span></li>
+      </ul>
+    </div>
+    <div class="panel var">
+      <div class="ph"><span class="dot"></span><h4>도면별 분기 — 설정으로 분리</h4></div>
+      <p class="pd">도면마다 다른 값. 코드는 안 건드리고 <b>yaml만 갈아끼움</b>.</p>
+      <ul class="rules">
+        <li><span class="rk">길이 라우팅</span><span class="rv">어느 단면도에서 어느 부호를 재는가 (도면마다 다름)</span></li>
+        <li><span class="rk">height 컷</span><span class="rv">작은 글자=노이즈 거르는 높이 (도면1:177, 도면2:302…)</span></li>
+        <li><span class="rk">override</span><span class="rv">자동 판단이 틀린 예외만 강제 — 현재 도면3에 "일람표 제외 ON" 한 줄</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="diversity">
+    <div class="dh"><span>예시 — 같은 부재를 도면마다 이렇게 다르게 씁니다</span><span class="badge">표기 변형 → 정규식 1벌로 커버</span></div>
+    <div class="style-group">
+      <div class="sg-label">H형강 규격 (기둥·보)</div>
+      <div class="style3">
+        <div class="scol">
+          <div class="stag">도면1·2 — H 붙임</div>
+          <div class="sval mono">H-588x300x12/20</div>
+        </div>
+        <div class="scol">
+          <div class="stag">도면4 — H 뒤 공백</div>
+          <div class="sval mono">H 350x175x7/11</div>
+        </div>
+        <div class="scol">
+          <div class="stag">도면3·5 — H 없음</div>
+          <div class="sval mono">600x407x20x35</div>
+        </div>
+      </div>
+    </div>
+    <div class="style-group">
+      <div class="sg-label">C 부호 (도면3·5 합성기둥)</div>
+      <div class="style3">
+        <div class="scol">
+          <div class="stag">본체 — 슬래시 결합</div>
+          <div class="sval mono">C1/P1</div>
+        </div>
+        <div class="scol">
+          <div class="stag">일람표 부호 — 단독</div>
+          <div class="sval mono">C1</div>
+        </div>
+        <div class="scol">
+          <div class="stag">일람표 규격 — H 없음</div>
+          <div class="sval mono">600x407x20x35</div>
+        </div>
+      </div>
+    </div>
+    <p class="style-note">표기 변형이 손에 꼽히게 수렴하므로(H 유무·공백·슬래시 결합), <b>정규식의 H를 선택 처리하고 슬래시 결합을 분해</b>해 코드 한 벌로 5개 도면을 다 잡았습니다. 추출은 전부 성공 — 표기만 다를 뿐입니다. 다만 회사가 늘어 변형이 다양해지면, 이 "같은 부재의 다른 표기" 판단은 <b>LLM 라우팅</b>이 맡기 좋은 영역입니다.</p>
+  </div>
+</section>
+
+<!-- SECTION 3 : NON-AUTOMATABLE -->
+<section class="reveal">
+  <div class="sec-num">03 / 보완</div>
+  <div class="sec-title">자동화가 안 되는 부분은 어떻게 처리했나</div>
+  <p class="sec-sub">"코드가 측정할 수 있는 결정"은 자동화로 흡수했고, "도면에 숫자로 안 적힌 지식"은 사람이 설정에 적되 코드가 그대로 재현하게 했습니다. 그리고 무엇을 해도 <b>기존 통과 케이스는 깨지 않는</b> 안전망을 깔았습니다.</p>
+  <div class="boxrow">
+    <div class="sbox solved">
+      <div class="st">자동화로 흡수</div>
+      <h4>일람표 유무 판정</h4>
+      <p>원래 도면마다 손으로 켜던 정책을 <code>auto_policy.py</code>가 도면 분석으로 자동 결정. 5개 중 4개는 자동이 정확해 <b>설정 없음(null)</b>.</p>
+    </div>
+    <div class="sbox human">
+      <div class="st">예외만 강제</div>
+      <h4>도면3 override 한 줄</h4>
+      <p>도면3 본체는 기둥·콘크리트가 <code>C1/P1</code>처럼 슬래시로 붙은 표기라, 자동 검출기가 본체 자유 텍스트를 일람표로 착각해 <b>일람표를 0곳으로 오판</b> → 일람표 안 부호까지 셈. 그래서 <code>exclude_table_regions: true</code>(일람표 영역 제외)만 수동 강제.</p>
+    </div>
+    <div class="sbox">
+      <div class="st">안전망</div>
+      <h4>회귀 테스트 절대 조건</h4>
+      <p>신규 작업이 기존 PASS를 깨면 즉시 중단. 본선 코드(<code>counter.py</code> 등)는 무수정 보호.</p>
+    </div>
+  </div>
+  <div class="principle">
+    <span class="pl">설계 원칙</span>
+    <span class="pq">"<b>AI는 결정만, 도구는 측정만.</b>" 코드는 숫자를 재고, 어느 값을 쓸지는 사람·LLM이 정한다.</span>
+  </div>
+
+  <div class="regr">
+    <div class="regr-head">
+      <h4>회귀 테스트 — 새 도면/신규 작업이 들어와도 기존 통과가 안 깨지는지 검증하는 항목</h4>
+      <p>신규 작업 전후로 항상 돌려 숫자가 떨어지지 않는지 확인합니다. 하나라도 깨지면 즉시 중단.</p>
+    </div>
+    <table class="rtab">
+      <thead><tr><th>단계</th><th>검증 항목</th><th>통과 기준</th></tr></thead>
+      <tbody>
+        <tr><td class="rstage">개수</td><td>부호별 합계 vs 정답지</td><td>14/16 유지 (오차 5% 이내, 소수는 ±1)</td></tr>
+        <tr><td class="rstage">길이</td><td>부호별 길이 vs 정답지</td><td>16/16 유지 (≤1000mm ±50, &gt;1000mm ±2%)</td></tr>
+        <tr><td class="rstage">규격</td><td>추출 규격이 정답 규격을 포함하는지</td><td>(도면·동·부호) 키별 정답 포함</td></tr>
+        <tr><td class="rstage">규격</td><td>적산 외 부재 미혼입</td><td>P·BR·SBR·MF가 결과에 0건</td></tr>
+        <tr><td class="rstage">규격</td><td>보 부호 전수 보존</td><td>SB·SG 등 누락 없이 존재</td></tr>
+        <tr><td class="rstage">규격</td><td>출처 분리 보존</td><td>도면4 SC1이 1층·지붕층 2건으로 갈림</td></tr>
+      </tbody>
+    </table>
+    <p class="regr-foot">+ 본선 코드(<code>counter.py</code> 등)는 무수정 보호. 길이는 "어느 단면도가 어느 기둥인가"라는 도면 간 관계 지식이 필요해 <code>length_routing.yaml</code>에 사람이 명시 — 코드가 기하로 못 푸는 영역.</p>
+  </div>
+</section>
+
+<!-- SECTION 4 : VISION -->
+<section class="reveal">
+  <div class="sec-num">04 / 비전</div>
+  <div class="sec-title">다음 단계 — 딸깍 한 번으로 총중량까지</div>
+  <p class="sec-sub">지금 yaml은 <b>사람이</b> 도면을 보고 채웁니다(새 도면당 5~10분). 다음 라운드는 이 자리를 <b>LLM 라우팅</b>이 채우게 합니다. yaml을 없애는 게 아니라, <b>채우는 주체를 사람에서 LLM으로</b> 바꾸는 것 — 그래서 결정론적 재현성과 자동화가 동시에 성립합니다.</p>
+  <div class="pipe">
+    <div class="pipe-row">
+      <div class="pipe-now">
+        <div class="pipe-lbl">지금</div>
+        <h4>사람이 yaml 작성</h4>
+        <p>적산 담당이 도면을 보고 화이트리스트·라우팅·height를 직접 입력. 새 도면마다 5~10분 개입.</p>
+      </div>
+      <div class="pipe-arrow">→</div>
+      <div class="pipe-future">
+        <div class="pipe-lbl">목표</div>
+        <h4>LLM이 yaml 초안 생성 → 전문가 검토</h4>
+        <p>LLM이 시트 종류·중복·부호 카테고리를 판별해 설정 초안을 쓰고, 전문가는 확인만. 코드는 그대로 결정론 실행.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="feed">
+    <div class="feed-title">LLM에게 주는 입력 — DXF만 던지는 게 아닙니다</div>
+    <div class="feed-row">
+      <div class="feed-card">
+        <span class="fn">①</span>
+        <h5>측정 결과</h5>
+        <p>코드가 먼저 뽑아 정리한 부호·규격·좌표. LLM이 DXF를 직접 파싱하지 않고, 완성된 추출기 출력을 받습니다.</p>
+      </div>
+      <div class="feed-card">
+        <span class="fn">②</span>
+        <h5>yaml 스키마</h5>
+        <p>채워야 할 빈칸의 형식. 자유 작문이 아니라 정해진 틀을 채우게 해 출력이 항상 코드가 읽는 형태입니다.</p>
+      </div>
+      <div class="feed-card">
+        <span class="fn">③</span>
+        <h5>도면 규칙</h5>
+        <p>부호 카테고리·시트 종류·표기 변형(H-/H /없음) 같은 도메인 규칙. 분량이 작아 <b>프롬프트에 직접 주입</b>.</p>
+      </div>
+    </div>
+    <p class="feed-note">※ RAG(외부 문서 임베딩 검색)는 현재 규모엔 과합니다 — 필요한 지식이 한두 페이지 규칙이라 프롬프트 주입이 더 정확·재현적. KS 단위중량표·회사별 표준사양서가 수백 항목으로 커지면 그때 RAG 검토.</p>
+  </div>
+
+  <div class="flow">
+    <div class="step llm" onclick="alert('LLM 라우팅: 평면도·단면도·일람표·주심도를 자동 분류해 어느 시트가 본체이고 어느 게 중복 표기인지 판별')">
+      <div class="circ">1</div>
+      <div class="sn">도면 투입</div>
+      <div class="sd">DXF 업로드</div>
+      <div class="who">LLM</div>
+    </div>
+    <div class="step llm" onclick="alert('개수 중복: 도면4 1층 SC1 14개 = 지붕층 SC1 14개 = 같은 관통 기둥. 규격 중복: 같은 부호가 여러 일람표에. 어느 걸 진짜로 칠지 LLM이 판별')">
+      <div class="circ">2</div>
+      <div class="sn">설정 초안</div>
+      <div class="sd">시트 분류·중복 판별</div>
+      <div class="who">LLM</div>
+    </div>
+    <div class="step human" onclick="alert('재현성과 자동화의 양립: 사람은 yaml을 검토만 하고, 실제 측정은 코드가 yaml만 보고 똑같이 실행')">
+      <div class="circ">3</div>
+      <div class="sn">전문가 검토</div>
+      <div class="sd">yaml 확인·승인</div>
+      <div class="who">사람</div>
+    </div>
+    <div class="step" onclick="alert('이미 완성된 3종 측정 엔진이 검증된 yaml을 받아 결정론적으로 실행')">
+      <div class="circ">4</div>
+      <div class="sn">측정 실행</div>
+      <div class="sd">개수·길이·규격</div>
+      <div class="who">코드</div>
+    </div>
+    <div class="step out" onclick="alert('중복 판별이 끝난 뒤 단위중량을 곱해 부재별·총 중량 산출. 단위중량 표는 KS D 3502 확정값으로 교체 예정')">
+      <div class="circ">5</div>
+      <div class="sn">총중량 파일</div>
+      <div class="sd">kg 산출·출력</div>
+      <div class="who">코드</div>
+    </div>
+  </div>
+  <p class="click-hint">▸ 각 단계를 누르면 상세 설명이 나옵니다</p>
+
+  <div class="bigflow">
+    <div class="bf-title">한 장으로 보는 작동 순서 — 입력부터 총중량 파일까지</div>
+    <svg viewBox="0 0 680 590" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="LLM 라우팅 전체 작동 순서">
+      <defs><marker id="ar" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="#b85c38" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
+
+      <text x="40" y="22" font-family="'IBM Plex Mono',monospace" font-size="12" fill="#8a9099" font-weight="500">LLM에게 주는 입력 — DXF만 던지는 게 아닙니다</text>
+
+      <g>
+        <rect x="40" y="32" width="190" height="60" rx="8" fill="#f1efe8" stroke="#888780" stroke-width="0.5"/>
+        <text x="135" y="56" text-anchor="middle" font-family="'IBM Plex Sans KR',sans-serif" font-size="14" font-weight="500" fill="#2c2c2a">① 측정 결과</text>
+        <text x="135" y="76" text-anchor="middle" font-family="'IBM Plex Sans KR',sans-serif" font-size="12" fill="#5f5e5a">코드가 뽑은 부호·규격·좌표</text>
+      </g>
+      <g>
+        <rect x="245" y="32" width="190" height="60" rx="8" fill="#f1efe8" stroke="#888780" stroke-width="0.5"/>
+        <text x="340" y="56" text-anchor="middle" font-family="'IBM Plex Sans KR',sans-serif" font-size="14" font-weight="500" fill="#2c2c2a">② yaml 스키마</text>
+        <text x="340" y="76" text-anchor="middle" font-family="'IBM Plex Sans KR',sans-serif" font-size="12" fill="#5f5e5a">채울 빈칸의 형식</text>
+      </g>
+      <g>
+        <rect x="450" y="32" width="190" height="60" rx="8" fill="#f1efe8" stroke="#888780" stroke-width="0.5"/>
+        <text x="545" y="56" text-anchor="middle" font-family="'IBM Plex Sans KR',sans-serif" font-size="14" font-weight="500" fill="#2c2c2a">③ 도면 규칙</text>
+        <text x="545" y="76" text-anchor="middle" font-family="'IBM Plex Sans KR',sans-serif" font-size="12" fill="#5f5e5a">부호 분류·시트 종류 (프롬프트)</text>
+      </g>
+
+      <line x1="135" y1="92" x2="300" y2="128" stroke="#b85c38" stroke-width="1.5" marker-end="url(#ar)"/>
+      <line x1="340" y1="92" x2="340" y2="128" stroke="#b85c38" stroke-width="1.5" marker-end="url(#ar)"/>
+      <line x1="545" y1="92" x2="380" y2="128" stroke="#b85c38" stroke-width="1.5" marker-end="url(#ar)"/>
+
+      <g>
+        <rect x="170" y="130" width="340" height="68" rx="10" fill="#e8eef4" stroke="#185fa5" stroke-width="0.5"/>
+        <text x="340" y="156" text-anchor="middle" font-family="'IBM Plex Sans KR',sans-serif" font-size="14" font-weight="500" fill="#0c447c">LLM 라우팅 — 판단</text>
+        <text x="340" y="178" text-anchor="middle" font-family="'IBM Plex Sans KR',sans-serif" font-size="12" fill="#185fa5">시트 분류 · 개수/규격 중복 판별 · 부호 카테고리</text>
+      </g>
+      <line x1="340" y1="198" x2="340" y2="232" stroke="#b85c38" stroke-width="1.5" marker-end="url(#ar)"/>
+
+      <g>
+        <rect x="195" y="234" width="290" height="58" rx="8" fill="#f6ecd6" stroke="#854f0b" stroke-width="0.5"/>
+        <text x="340" y="258" text-anchor="middle" font-family="'IBM Plex Sans KR',sans-serif" font-size="14" font-weight="500" fill="#633806">yaml 초안 출력</text>
+        <text x="340" y="278" text-anchor="middle" font-family="'IBM Plex Sans KR',sans-serif" font-size="12" fill="#854f0b">사람이 쓰던 그 설정 파일을 LLM이 작성</text>
+      </g>
+      <line x1="340" y1="292" x2="340" y2="326" stroke="#b85c38" stroke-width="1.5" marker-end="url(#ar)"/>
+
+      <g>
+        <rect x="195" y="328" width="290" height="58" rx="8" fill="#faece7" stroke="#993c1d" stroke-width="0.5"/>
+        <text x="340" y="352" text-anchor="middle" font-family="'IBM Plex Sans KR',sans-serif" font-size="14" font-weight="500" fill="#712b13">전문가 검토 · 승인</text>
+        <text x="340" y="372" text-anchor="middle" font-family="'IBM Plex Sans KR',sans-serif" font-size="12" fill="#993c1d">초안 확인·수정 (사람이 최종 게이트)</text>
+      </g>
+      <line x1="340" y1="386" x2="340" y2="420" stroke="#b85c38" stroke-width="1.5" marker-end="url(#ar)"/>
+
+      <g>
+        <rect x="150" y="422" width="380" height="58" rx="8" fill="#eaf3de" stroke="#3b6d11" stroke-width="0.5"/>
+        <text x="340" y="446" text-anchor="middle" font-family="'IBM Plex Sans KR',sans-serif" font-size="14" font-weight="500" fill="#27500a">코드 실행 (이미 완성된 측정 엔진)</text>
+        <text x="340" y="466" text-anchor="middle" font-family="'IBM Plex Sans KR',sans-serif" font-size="12" fill="#3b6d11">yaml만 보고 결정론 실행 → 중복 제거 후 × 단위중량</text>
+      </g>
+      <line x1="340" y1="480" x2="340" y2="514" stroke="#b85c38" stroke-width="1.5" marker-end="url(#ar)"/>
+
+      <g>
+        <rect x="225" y="516" width="230" height="50" rx="8" fill="#eaf3de" stroke="#3b6d11" stroke-width="1.5"/>
+        <text x="340" y="546" text-anchor="middle" font-family="'IBM Plex Sans KR',sans-serif" font-size="15" font-weight="600" fill="#173404">총중량 산출 파일 (kg)</text>
+      </g>
+    </svg>
+    <p class="bf-note">핵심 — LLM은 "알아서 추론"이 아니라 <b>정해진 틀(yaml 스키마)을 채우는 한 칸</b>만 맡습니다. 앞(측정)도 뒤(실행)도 결정론 코드, 중간 게이트는 사람. 그래서 LLM을 써도 같은 입력이면 같은 결과 — 재현성과 자동화가 양립합니다.</p>
+  </div>
+</section>
+
+<footer>
+  <p class="foot-formula">측정 완료 → <span class="hi">개수 × 길이 × 규격</span> → 중복 판별(LLM) → × 단위중량 → <span class="hi">총중량 kg</span></p>
+</footer>
+
+</div>
+<script>
+const io=new IntersectionObserver((es)=>{es.forEach(e=>{if(e.isIntersecting)e.target.classList.add('in');});},{threshold:.12});
+document.querySelectorAll('.reveal').forEach(el=>io.observe(el));
+</script>
+</body>
+</html>
