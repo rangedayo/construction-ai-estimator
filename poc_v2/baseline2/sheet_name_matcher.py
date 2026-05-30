@@ -151,7 +151,10 @@ def load_length_labels(
     labels: list[str] = []
     for source in entry.get("sources", []) or []:
         raw = source.get("sheet_label", "")
-        for token in re.split(r"[,、]", str(raw)):
+        # 리스트 구분자는 "콤마+공백"(", ") 또는 "、" 만 인정한다. 콤마가 토큰
+        # 내부("가,나동" = 가동·나동 결합)에 쓰일 수 있으므로 공백 없는 콤마로는
+        # 쪼개지 않는다. 예) "종단면도, 횡단면도" → 2개,  "가,나동 횡단면도" → 1개.
+        for token in re.split(r",\s+|\s*、\s*", str(raw)):
             token = token.strip()
             if token and token not in labels:
                 labels.append(token)
