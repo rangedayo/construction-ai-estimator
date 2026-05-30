@@ -9,16 +9,19 @@ Plotly 인터랙티브 시각화로 각 부재의 DXF 좌표를 줌인해 검증
 
 ## 프로젝트 구조
 
-```
-construction-ai-estimator/
-├── poc_v2/
-│   ├── app.py            # Streamlit 메인 앱
-│   ├── counter.py        # DXF TEXT/MTEXT 부재 카운팅 로직
-│   ├── coord_utils.py    # 픽셀 ↔ DXF 좌표 변환 유틸리티
-│   └── requirements.txt  # Python 의존성
-└── sample_data/
-    └── *.dxf             # 테스트용 도면 파일
-```
+- `poc_v2/` — 활성 본선 코드 (app.py, counter.py, length/, qto/, tests/)
+- `config/` — 활성 yaml 설정 (symbol_rules, length_routing, unit_weight_table)
+- `sample_data/` — 테스트용 DXF (기밀, git 추적 제외)
+- `reference_materials/` — 정답지 xlsx (기밀, git 추적 제외)
+- `outputs/`
+  - `prompts/` — 라운드 작업 프롬프트 (히스토리)
+  - `reports/` — 라운드 결과 보고서
+  - `notes/` — 사전조사·진단 메모
+  - `results/` — csv 등 최종 산출물
+  - `visualize/` — 시각화 HTML
+  - `diagnose/` — 진단 스크립트 (sys.path 의존, 제자리 유지)
+  - `archive/` — 구버전 PoC(poc_v1·poc_v3)·미참조 자산
+    - `images/` — 검색 노이즈 차단용 이미지 격리
 
 ## 실행 방법
 
