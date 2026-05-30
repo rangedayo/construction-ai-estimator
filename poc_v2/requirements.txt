@@ -1,10 +1,18 @@
-streamlit
-streamlit-drawable-canvas
-ezdxf
-matplotlib
-pillow
-plotly
-# 테스트 인프라 / 설정 파일용
-openpyxl
-pyyaml
-pytest
+# construction-ai-estimator — 직접 의존성 (transitive 는 pip 가 자동 해결)
+# Python 3.11 전제 (.python-version / pyproject.toml requires-python 참조)
+#
+# 설치:  pip install -r poc_v2/requirements.txt   (repo 루트에서)
+# 회귀:  pytest poc_v2/                            # 234 passed / 2 known-fail(도면2 SC1·SC2)
+
+# --- 앱 + 시각화 (app.py / visualize_*.py 전용) ---
+streamlit==1.33.0
+streamlit-drawable-canvas==0.9.3
+ezdxf==1.4.3
+matplotlib==3.10.9
+pillow==10.4.0
+plotly==6.7.0
+
+# --- 테스트 인프라 / 설정 파일 파싱 (pytest 회귀에 필요한 코어) ---
+openpyxl==3.1.5
+pyyaml==6.0.3
+pytest==9.0.3

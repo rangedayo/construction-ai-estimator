@@ -1,0 +1,7 @@
+# 메타데이터 전용 — 빌드/패키징 대상 아님 (의존성은 poc_v2/requirements.txt 가 소스)
+# 목적: Python 버전 핀 명시 (핸드오프 작업-1 §2.2)
+[project]
+name = "construction-ai-estimator"
+version = "0.1.0"
+description = "건설 도면(DXF) 부재 부호 자동 카운트 PoC"
+requires-python = ">=3.11,<3.12"
