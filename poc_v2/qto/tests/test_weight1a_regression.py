@@ -49,10 +49,16 @@ def test_load_dedup_routing_도면4_two_routes():
 
 
 def test_load_dedup_routing_ignores_memo_blocks():
-    """실제 yaml 의 주석/메모는 무시하고 기둥 라우팅만 로드."""
+    """실제 yaml 의 주석/메모는 무시하고 기둥 라우팅만 로드.
+
+    1b 에서 yaml 이 5장으로 확장됨 — 도면4 라우팅이 보존되고 메모/주석 키가
+    DedupRoute 로 새지 않는지만 확인한다(도면4 전용 가정은 1b 에서 폐기).
+    """
     routes = load_dedup_routing()
     assert all(isinstance(r, DedupRoute) for r in routes)
-    assert {(r.drawing, r.symbol) for r in routes} == {("도면4", "SC1"), ("도면4", "SC2")}
+    by = {(r.drawing, r.symbol) for r in routes}
+    assert ("도면4", "SC1") in by and ("도면4", "SC2") in by
+    assert all(r.drawing.startswith("도면") for r in routes)
 
 
 def test_dedup_empty_sheet_raises(tmp_path):
@@ -81,7 +87,10 @@ def test_dedup_duplicate_symbol_raises(tmp_path):
 
 def test_compute_weight_pure_with_fakes():
     routes = [
-        DedupRoute("도면X", "기둥", "A1", "본체시트", "일람표시트"),
+        DedupRoute(
+            drawing="도면X", section=None, member_kind="기둥", symbol="A1",
+            count_from="본체시트", count_override=None, spec_from="일람표시트",
+        ),
     ]
     rows = compute_weight_for_drawing(
         "도면X", routes,
@@ -102,7 +111,10 @@ def test_compute_weight_pure_with_fakes():
 
 
 def test_compute_weight_missing_length_raises():
-    routes = [DedupRoute("도면X", "기둥", "A1", "s", "s")]
+    routes = [DedupRoute(
+        drawing="도면X", section=None, member_kind="기둥", symbol="A1",
+        count_from="s", count_override=None, spec_from="s",
+    )]
     with pytest.raises(ValueError, match="길이"):
         compute_weight_for_drawing(
             "도면X", routes,
