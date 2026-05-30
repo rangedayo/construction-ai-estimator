@@ -13,55 +13,55 @@
 drawings:
   도면1:
     sources:
-      - file: sample_data/도면1-기둥-길이_2동_Y01열골구도.dxf
+      - file: sample_data/도면1-2동_Y01열골구도.dxf
         sheet_label: "(2동)Y01열골구도, (2동)Y03,Y05열골구도"
         applies_to: [MC1, MC2, SC1]
         method: dimension_max_vertical
-      - file: sample_data/도면1-기둥-길이_2동_Y03열골구도.dxf
+      - file: sample_data/도면1-2동_Y03열골구도.dxf
         sheet_label: "(2동)Y01열골구도, (2동)Y03,Y05열골구도"
         applies_to: [MC1, MC2, MC3, SC1]
         method: dimension_max_vertical
-      - file: sample_data/도면1-기둥-길이_2동_Y05열골구도.dxf
+      - file: sample_data/도면1-2동_Y05열골구도.dxf
         sheet_label: "(2동)Y01열골구도, (2동)Y03,Y05열골구도"
         applies_to: [MC1, MC2, MC3, SC1]
         method: dimension_max_vertical
 
   도면2:
     sources:
-      - file: sample_data/도면2-기둥-길이_가나동_횡단면도.dxf
+      - file: sample_data/도면2_가나동횡단면도.dxf
         sheet_label: "가,나동 횡단면도"
         applies_to: [SC1, SC2]
         method: dimension_max_vertical
 
   도면3:
     sources:
-      - file: sample_data/도면3-기둥-길이_종단면도.dxf
+      - file: sample_data/도면3_종단면도.dxf
         sheet_label: "종단면도, 계단단면도"
         applies_to: [C1, C2, C3, C4]
         method: dimension_max_vertical
-      - file: sample_data/도면3-기둥-길이_계단단면도.dxf
+      - file: sample_data/도면3_계단단면도.dxf
         sheet_label: "종단면도, 계단단면도"
         applies_to: [C1, C2, C3, C4]
         method: dimension_max_vertical
 
   도면4:
     sources:
-      - file: sample_data/도면4-기둥-길이_종단면도.dxf
+      - file: sample_data/도면4_종단면도.dxf
         sheet_label: "종단면도, 횡단면도"
         applies_to: [SC1, SC2]
         method: dimension_max_vertical
-      - file: sample_data/도면4-기둥-길이_횡단면도.dxf
+      - file: sample_data/도면4_횡단면도.dxf
         sheet_label: "종단면도, 횡단면도"
         applies_to: [SC1, SC2]
         method: dimension_max_vertical
 
   도면5:
     sources:
-      - file: sample_data/도면5-기둥-길이_주단면도1.dxf
+      - file: sample_data/도면5_주단면도1.dxf
         sheet_label: "주단면도1, 주단면도4"
         applies_to: [C1, C2, C3, C4]
         method: dimension_max_vertical
-      - file: sample_data/도면5-기둥-길이_주단면도4.dxf
+      - file: sample_data/도면5_주단면도4.dxf
         sheet_label: "주단면도1, 주단면도4"
         applies_to: [C1, C2, C3, C4]
         method: dimension_max_vertical
