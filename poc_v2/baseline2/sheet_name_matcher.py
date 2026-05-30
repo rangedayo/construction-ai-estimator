@@ -4,10 +4,22 @@
 정규화 후 결정론적으로 매칭한다.
 
 매칭 순서 (보편 룰 우선; fallback yaml 은 최후의 수단)
-    1. exact    : 정규화 일치 (카운트 시트 우선, 그다음 길이 라벨)
-    2. partial  : 한쪽이 다른쪽을 포함 (도면4 "단면도" ⊂ "종단면도"/"횡단면도")
-    3. fallback : config/sheet_name_overrides.yaml 의 매핑
-    4. unmatched: 위 셋 실패
+    1. exact     : 정규화 일치 (카운트 시트 우선, 그다음 길이 라벨)
+    2. partial   : 한쪽이 다른쪽을 포함 (도면4 "단면도" ⊂ "종단면도"/"횡단면도")
+    3. component : 결합 시트명/표제부를 컴포넌트로 분해해 매칭 (분리본 cross-check)
+    4. fallback  : config/sheet_name_overrides.yaml 의 매핑
+    5. unmatched : 위 넷 실패
+
+라운드 베이스라인-7: "component" 단계 추가 — 분리본 dxf 의 cross-check 매칭.
+    * 메커니즘 A (결합 표제부 split): 분리본 표제부가 결합형("종단면도, 계단단면도")
+      이라 placeholder count 행에 단락(short-circuit)될 때, 표제부를 결합 구분자로
+      쪼갠 컴포넌트가 length 라벨과 일치하면 length 로 라우팅한다. 기존 placeholder→
+      length 우선 로직(베이스라인-6)의 "결합 표제부" 확장.
+    * 메커니즘 B (열 식별자 suffix 공유 전개): exact·partial 완전 실패 시, length
+      라벨 중 영숫자 열 식별자 결합("(2동)Y03,Y05열골구도")을 suffix 공유로 전개
+      ("(2동)Y03열골구도"+"(2동)Y05열골구도")해 표제부와 partial 매칭한다. 영숫자
+      한정이라 도면2 한글 동 라벨("가,나동")은 절대 전개하지 않는다(베이스라인-5
+      토큰 내부 콤마 보존 준수).
 
 데이터 소스 (무수정)
     * reference_materials/도면_정답지.xlsx — 카운트 시트(세부 도면명 = 데이터 행)
@@ -38,11 +50,19 @@ _TOTAL_LABEL = "합계"
 _NON_SYMBOL_HEADERS = frozenset({"도면명", "분석 대상", _TOTAL_LABEL})
 _CATEGORY_SUFFIXES = ("-기둥", "-보")
 
-Confidence = Literal["exact", "partial", "fallback", "unmatched"]
+Confidence = Literal["exact", "partial", "component", "fallback", "unmatched"]
 Kind = Literal["count", "length", "unmatched"]
 
 # 정규화 제거 문자 — 공백·콤마·괄호·줄바꿈·하이픈·슬래시·점·중점.
 _NORMALIZE_STRIP = re.compile(r"[\s,()\[\]\-/.·、]+")
+
+# 결합 구분자 — 진짜 "A + B 결합"으로 보는 구분자만. 공백 없는 콤마는 토큰
+# 내부일 수 있어(베이스라인-5: "가,나동") 여기 넣지 않는다.
+_COMBINATION_SPLIT = re.compile(r",\s+|\s*、\s*|\n\(?")
+
+# 영숫자 열 식별자 결합 — "Y03,Y05" 같은 공백 없는 콤마 쌍. 한글("가,나동")은
+# 매칭되지 않으므로 동 라벨은 절대 전개되지 않는다.
+_ID_PAIR = re.compile(r"([A-Za-z]+\d+),([A-Za-z]+\d+)")
 
 
 @dataclass(frozen=True)
@@ -223,6 +243,53 @@ def _count_is_placeholder(
     return False
 
 
+def _split_components(text: str) -> list[str]:
+    """결합 표제부/시트명을 컴포넌트로 분해 (메커니즘 A).
+
+    결합 구분자(", "·"、"·줄바꿈)로만 쪼갠다. 공백 없는 콤마는 토큰 내부로
+    보존하므로 도면2 "가,나동 종단면도"는 1개로 유지된다.
+    예) "종단면도, 계단단면도" → ["종단면도", "계단단면도"].
+    """
+    parts = _COMBINATION_SPLIT.split(text)
+    return [p.strip() for p in parts if p.strip()]
+
+
+def _expand_id_pair(label: str) -> list[str]:
+    """영숫자 열 식별자 결합을 suffix 공유로 전개 (메커니즘 B).
+
+    예) "(2동)Y03,Y05열골구도"
+        → ["(2동)Y03열골구도", "(2동)Y05열골구도"]
+    영숫자 패턴이 없으면 원본 1개만 반환. 한글 동 라벨("가,나동")은
+    _ID_PAIR 에 매칭되지 않으므로 전개되지 않는다.
+    """
+    m = _ID_PAIR.search(label)
+    if not m:
+        return [label]
+    prefix, suffix = label[: m.start()], label[m.end():]
+    return [f"{prefix}{m.group(1)}{suffix}", f"{prefix}{m.group(2)}{suffix}"]
+
+
+def _component_norms(extracted_titles: list[str]) -> set[str]:
+    """표제부들을 결합 구분자로 쪼갠 컴포넌트의 정규화 집합."""
+    norms: set[str] = set()
+    for title in extracted_titles:
+        for comp in _split_components(title):
+            n = normalize(comp)
+            if n:
+                norms.add(n)
+    return norms
+
+
+def _component_length(
+    comp_norms: set[str], norm_length: dict[str, str]
+) -> Optional[str]:
+    """표제부 컴포넌트가 length 라벨과 일치하면 그 raw 라벨을 반환 (메커니즘 A)."""
+    hit = _find_exact(comp_norms, norm_length)
+    if hit is not None:
+        return hit
+    return _find_partial(comp_norms, norm_length)
+
+
 def match_sheet(
     drawing: str,
     extracted_titles: list[str],
@@ -257,6 +324,7 @@ def match_sheet(
     norm_titles = {normalize(t) for t in extracted_titles if t}
     norm_count = {normalize(name): name for name in count_rows}
     norm_length = {normalize(lbl): lbl for lbl in length_labels}
+    comp_norms = _component_norms(extracted_titles)
     candidates = list(count_rows.keys()) + length_labels
 
     if not norm_titles:
@@ -271,10 +339,14 @@ def match_sheet(
     hit_count = _find_exact(norm_titles, norm_count)
     hit_length = _find_exact(norm_titles, norm_length)
     if hit_count is not None:
-        if hit_length is not None and _count_is_placeholder(
-            count_rows.get(hit_count), column_symbols
-        ):
-            return SheetMatch(hit_length, "exact", "length", candidates)
+        if _count_is_placeholder(count_rows.get(hit_count), column_symbols):
+            if hit_length is not None:
+                return SheetMatch(hit_length, "exact", "length", candidates)
+            # 결합 표제부(예: "종단면도, 계단단면도")가 placeholder count 행에
+            # exact 단락된 케이스 — 표제부 컴포넌트가 length 라벨이면 length 우선.
+            comp = _component_length(comp_norms, norm_length)
+            if comp is not None:
+                return SheetMatch(comp, "component", "length", candidates)
         return SheetMatch(hit_count, "exact", "count", candidates)
     if hit_length is not None:
         return SheetMatch(hit_length, "exact", "length", candidates)
@@ -284,15 +356,30 @@ def match_sheet(
     hit_count = _find_partial(norm_titles, norm_count)
     hit_length = _find_partial(norm_titles, norm_length)
     if hit_count is not None:
-        if hit_length is not None and _count_is_placeholder(
-            count_rows.get(hit_count), column_symbols
-        ):
-            return SheetMatch(hit_length, "partial", "length", candidates)
+        if _count_is_placeholder(count_rows.get(hit_count), column_symbols):
+            if hit_length is not None:
+                return SheetMatch(hit_length, "partial", "length", candidates)
+            comp = _component_length(comp_norms, norm_length)
+            if comp is not None:
+                return SheetMatch(comp, "component", "length", candidates)
         return SheetMatch(hit_count, "partial", "count", candidates)
     if hit_length is not None:
         return SheetMatch(hit_length, "partial", "length", candidates)
 
-    # 3) fallback yaml
+    # 3) component — 열 식별자 결합 length 라벨을 suffix 공유로 전개해 매칭
+    #    (메커니즘 B). exact·partial 완전 실패 시에만 발동. 예) 도면1 분리본
+    #    표제부 "Y03열골구도" ⊂ 전개된 "(2동)Y03열골구도".
+    expanded_length: dict[str, str] = {}
+    for label in length_labels:
+        for piece in _expand_id_pair(label):
+            np = normalize(piece)
+            if np:
+                expanded_length.setdefault(np, label)
+    comp_hit = _find_partial(norm_titles, expanded_length)
+    if comp_hit is not None:
+        return SheetMatch(comp_hit, "component", "length", candidates)
+
+    # 4) fallback yaml
     overrides = load_overrides(drawing, overrides_path)
     for title in extracted_titles:
         targets = overrides.get(title)
@@ -300,5 +387,5 @@ def match_sheet(
             kind: Kind = "count" if targets[0] in count_rows else "length"
             return SheetMatch(targets[0], "fallback", kind, candidates)
 
-    # 4) unmatched
+    # 5) unmatched
     return SheetMatch(None, "unmatched", "unmatched", candidates)

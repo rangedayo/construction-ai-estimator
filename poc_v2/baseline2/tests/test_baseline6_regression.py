@@ -218,10 +218,15 @@ def test_drawing3_count_unaffected() -> None:
     assert r.counts == {"C1": 8, "C2": 15, "C3": 8, "C4": 1}, r.counts
 
 
-# ── 8. 한계 — 분리본 Y03열골구도 unmatched ──────────────────────────────────
-def test_y03_standalone_unmatched() -> None:
-    """통합 라벨 "(2동)Y03,Y05열골구도" 에 "Y03열골구도" 단독본이 부분일치
-    안 됨(Y03 과 Y05 사이에 다른 토큰). 문서화된 한계 — 다음 라운드 통합 처리."""
+# ── 8. (구) 한계 — 분리본 Y03열골구도, 베이스라인-7 에서 해결 ─────────────────
+def test_y03_standalone_resolved_in_baseline7() -> None:
+    """베이스라인-6 까지는 통합 라벨 "(2동)Y03,Y05열골구도" 에 "Y03열골구도"
+    단독본이 부분일치 안 돼 unmatched 였다(Y03·Y05 사이 다른 토큰). 베이스라인-7
+    의 component 매칭(메커니즘 B — 영숫자 열 식별자 suffix 공유 전개)이 이 한계를
+    해결: "(2동)Y03,Y05열골구도" → "(2동)Y03열골구도" 전개 후 partial 매칭 →
+    length 6000 PASS. 자세한 검증은 test_baseline7_regression.py 참조."""
     r = _result("도면1-2동_Y03열골구도.dxf")
-    assert r.match_confidence == "unmatched", r.match_confidence
-    assert r.kind == "unmatched"
+    assert r.match_confidence == "component", r.match_confidence
+    assert r.kind == "length"
+    assert r.length_mm == pytest.approx(6000.0, abs=1.0), r.length_mm
+    assert r.pass_length is True

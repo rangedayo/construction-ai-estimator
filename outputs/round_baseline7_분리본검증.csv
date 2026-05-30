@@ -1,0 +1,4 @@
+도면,분리본파일,통합본시트키,매칭전라우팅,매칭후라우팅,신뢰도,측정값,정답,결과
+도면1,도면1-2동_Y03열골구도.dxf,"(2동)Y03,Y05열골구도",unmatched,length,component,6000,6000,PASS
+도면3,도면3_종단면도.dxf,종단면도,count,length,component,19060,19060,PASS
+도면5,도면5_Y1축열골조도.dxf,Y1 축열 골조도,count,count,exact,N/A,10500,격리(length_routing.yaml 미등록)
