@@ -222,13 +222,20 @@ def match_sheet(
     if not norm_titles:
         return SheetMatch(None, "unmatched", "unmatched", candidates)
 
-    # 1) exact — 카운트 우선, 그다음 길이
-    hit = _find_exact(norm_titles, norm_count)
-    if hit is not None:
-        return SheetMatch(hit, "exact", "count", candidates)
-    hit = _find_exact(norm_titles, norm_length)
-    if hit is not None:
-        return SheetMatch(hit, "exact", "length", candidates)
+    # 1) exact — 실제 카운트 대상(비어있지 않은 행)이 최우선.
+    #    단, 카운트 행이 placeholder(빈 dict = 부호 0개)이고 동시에 length
+    #    라벨(length_routing 이 명시한 측정 소스)이면 length 가 우선한다.
+    #    예) 도면5 주단면도1·4 는 카운트 시트에 0-행으로 올라와 있지만 실제로는
+    #    단면도(길이 측정 소스)다. length_routing 은 사람이 지정한 신호이므로
+    #    auto-populated placeholder 행보다 강하다.
+    hit_count = _find_exact(norm_titles, norm_count)
+    hit_length = _find_exact(norm_titles, norm_length)
+    if hit_count is not None:
+        if hit_length is not None and not count_rows.get(hit_count):
+            return SheetMatch(hit_length, "exact", "length", candidates)
+        return SheetMatch(hit_count, "exact", "count", candidates)
+    if hit_length is not None:
+        return SheetMatch(hit_length, "exact", "length", candidates)
 
     # 2) partial
     hit = _find_partial(norm_titles, norm_count)
