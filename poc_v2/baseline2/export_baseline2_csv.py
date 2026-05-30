@@ -43,9 +43,10 @@ _HEADER = [
 def small_drawing_files(drawing: str) -> list[str]:
     """도면의 작은 도면 dxf 경로들 (큰 도면·부산물 제외, 정렬).
 
-    큰 통합 도면(예: 도면4.dxf)은 "_" 가 없어 글롭에 걸리지 않는다.
+    구분자는 "_"(도면2~5: 도면2_…) 또는 "-"(도면1: 도면1-1동_…) 둘 다 받는다.
+    큰 통합 도면(예: 도면4.dxf)은 다음 문자가 "." 라 글롭에 걸리지 않는다.
     """
-    return sorted(glob.glob(os.path.join(_SAMPLE_DIR, f"{drawing}_*.dxf")))
+    return sorted(glob.glob(os.path.join(_SAMPLE_DIR, f"{drawing}[-_]*.dxf")))
 
 
 def _fmt_counts(counts: dict[str, int]) -> str:

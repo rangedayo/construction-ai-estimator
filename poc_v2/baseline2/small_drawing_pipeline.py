@@ -61,6 +61,8 @@ from poc_v2.length.spec_extractor import extract_specs  # noqa: E402
 _FULL_EXTENT = (-1e18, -1e18, 1e18, 1e18)
 _COLUMN_CATEGORY = "기둥"  # 이번 라운드 스코프
 _DRAWING_RE = re.compile(r"^(도면\d+)")
+_DONG_RE = re.compile(r"(\d+동)")  # 도면1-2동_... → "2동" (없으면 None)
+_COORD_MATCH_EPS = 1.0  # 페어 부호 좌표 ↔ 카운트 좌표 겹침 판정(mm). 겹침=0.0, 비겹침≥5천
 
 
 @dataclass
@@ -122,15 +124,26 @@ def _count_columns(dxf_path: str, drawing: str) -> dict[str, int]:
         )
         exclude_with_spec = auto["exclude_with_spec"]
 
-    counts, _hits, _coords = count_members(
+    counts, _hits, coords_by_symbol = count_members(
         dxf_path, *_FULL_EXTENT, custom_whitelist=symbols,
         min_text_height=min_h, exclude_with_spec=exclude_with_spec,
         treat_slash_as_combo=True,
     )
     after = dict(counts)
 
-    # 일람표 정의행 차감 — 부호↔규격 페어 수만큼.
-    member_list = Counter(e.symbol for e in extract_specs(dxf_path, drawing))
+    # 일람표 정의행 차감 — 단, 페어의 부호 좌표가 카운트된 배치 좌표와
+    # 겹칠 때만. 일람표 부호 텍스트가 배치로 함께 카운트된 경우(도면3·4·5)만
+    # 과다카운트이므로 차감 대상이다. 도면1 처럼 페어가 별도 범례 위치라
+    # 애초에 카운트되지 않은 경우(좌표 수천 단위 이격) 차감하면 이중차감이 된다.
+    member_list: Counter = Counter()
+    for spec in extract_specs(dxf_path, drawing):
+        sx, sy = spec.symbol_coord
+        placed = coords_by_symbol.get(spec.symbol, [])
+        if any(
+            abs(cx - sx) <= _COORD_MATCH_EPS and abs(cy - sy) <= _COORD_MATCH_EPS
+            for cx, cy in placed
+        ):
+            member_list[spec.symbol] += 1
     final = {
         sym: max(0, after.get(sym, 0) - member_list.get(sym, 0))
         for sym in set(after) | set(member_list)
@@ -147,24 +160,44 @@ def _drawing_column_length(drawing: str) -> Optional[float]:
     return max(lengths) if lengths else None
 
 
-def _expected_column_specs(drawing: str) -> dict[str, str]:
-    """정답지 규격 → {기둥 부호: 정규화 규격}."""
+def _expected_column_specs(
+    drawing: str, dong: Optional[str] = None
+) -> dict[str, str]:
+    """정답지 규격 → {기둥 부호: 정규화 규격}.
+
+    dong 이 주어지면 그 동(section)의 규격만 쓴다. 도면1 처럼 같은 부호가 동별로
+    다른 규격(1동 MC1 ≠ 2동 MC1)을 가질 때 동을 섞지 않기 위함. dong=None 이면
+    전체(도면2~5: section 단일이라 무영향).
+    """
     answers = load_ground_truth_spec(drawings=[drawing])
     columns = set(_column_symbols(drawing))
     out: dict[str, str] = {}
-    for (_d, _section, symbol), answer in answers.items():
-        if symbol in columns:
-            out[symbol] = answer.spec_normalized
+    for (_d, section, symbol), answer in answers.items():
+        if symbol not in columns:
+            continue
+        if dong is not None and section is not None and section != dong:
+            continue
+        out[symbol] = answer.spec_normalized
     return out
 
 
 def process_small_drawing(file_path: str) -> SmallDrawingResult:
     """작은 도면 dxf 1장을 처리해 SmallDrawingResult 를 반환한다."""
     drawing = drawing_from_path(file_path)
+    dong_match = _DONG_RE.search(os.path.basename(file_path))
+    dong = dong_match.group(1) if dong_match else None
     titles = extract_sheet_titles(file_path)
     extracted_title = titles[0].raw_text if titles else None
 
-    match: SheetMatch = match_sheet(drawing, [t.raw_text for t in titles])
+    columns = _column_symbols(drawing)
+    # column_symbols 를 넘겨 골구도처럼 count 행이 보 부호뿐(기둥 0)인 시트가
+    # length 라벨이면 length 로 라우팅되게 한다(기둥 스코프 placeholder).
+    match: SheetMatch = match_sheet(
+        drawing,
+        [t.raw_text for t in titles],
+        dong=dong,
+        column_symbols=set(columns),
+    )
 
     result = SmallDrawingResult(
         file_path=file_path,
@@ -174,8 +207,6 @@ def process_small_drawing(file_path: str) -> SmallDrawingResult:
         match_confidence=match.confidence,
         kind=match.kind,
     )
-
-    columns = _column_symbols(drawing)
 
     if match.kind == "count":
         # 카운트 — 매칭된 시트의 기둥 정답과 비교
@@ -191,7 +222,7 @@ def process_small_drawing(file_path: str) -> SmallDrawingResult:
         ) if columns else None
 
         # 규격 — 배치가 있는(count>0) 기둥 부호만 비교
-        expected_specs = _expected_column_specs(drawing)
+        expected_specs = _expected_column_specs(drawing, dong)
         extracted = {
             e.symbol: e.spec_normalized
             for e in extract_specs(file_path, drawing)

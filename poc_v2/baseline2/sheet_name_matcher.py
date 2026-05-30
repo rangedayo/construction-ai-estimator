@@ -205,17 +205,54 @@ def _find_partial(norm_titles: set[str], norm_targets: dict[str, str]) -> Option
     return None
 
 
+def _count_is_placeholder(
+    row: Optional[dict[str, int]], column_symbols: Optional[set[str]]
+) -> bool:
+    """카운트 행이 (이번 스코프 기준) 측정 대상이 없는 placeholder 인가.
+
+    행이 비어 있으면 무조건 placeholder. column_symbols 가 주어지면 그 스코프
+    부호(이번 라운드=기둥) 중 양수 카운트가 하나도 없을 때도 placeholder 로 본다.
+    도면1 골구도 시트는 count 행에 보 부호(VG1·SG1)만 있고 기둥은 0 이라, 기둥
+    스코프에선 placeholder → length 라벨(측정 소스)이 우선해야 한다. column_symbols
+    가 None(기존 호출)이면 "행이 비었는가"만 보므로 도면2~5 동작은 불변이다.
+    """
+    if not row:
+        return True
+    if column_symbols is not None:
+        return not any(row.get(sym, 0) > 0 for sym in column_symbols)
+    return False
+
+
 def match_sheet(
     drawing: str,
     extracted_titles: list[str],
     *,
+    dong: Optional[str] = None,
+    column_symbols: Optional[set[str]] = None,
     count_path: Optional[str] = None,
     length_path: Optional[str] = None,
     overrides_path: Optional[str] = None,
 ) -> SheetMatch:
-    """추출 도면명 후보를 정답지 시트·길이 라벨과 매칭한다."""
+    """추출 도면명 후보를 정답지 시트·길이 라벨과 매칭한다.
+
+    dong
+        "1동"/"2동" 같은 동 라벨(보통 파일명에서 추출). 주어지면 시트명·길이
+        라벨 후보를 해당 동 라벨을 포함하는 것으로 먼저 좁힌다. 표제부 텍스트에
+        동 라벨이 없어(예: 도면1 "기둥주심도") 1동/2동 시트가 동명이칭일 때
+        partial 매칭이 엉뚱한 동을 잡는 것을 막는다. dong=None(도면2~5)이면
+        후보 전체를 쓰므로 기존 동작과 동일하다.
+    """
     count_rows = load_count_sheet_rows(drawing, count_path)
     length_labels = load_length_labels(drawing, length_path)
+
+    if dong:
+        nd = normalize(dong)
+        filtered_rows = {k: v for k, v in count_rows.items() if nd in normalize(k)}
+        filtered_labels = [l for l in length_labels if nd in normalize(l)]
+        # 동 라벨로 좁힌 후보가 하나라도 있으면 적용. 전혀 없으면(동 라벨이
+        # 시트명에 안 쓰인 도면) 좁히지 않고 전체 후보를 그대로 둔다.
+        if filtered_rows or filtered_labels:
+            count_rows, length_labels = filtered_rows, filtered_labels
 
     norm_titles = {normalize(t) for t in extracted_titles if t}
     norm_count = {normalize(name): name for name in count_rows}
@@ -234,19 +271,26 @@ def match_sheet(
     hit_count = _find_exact(norm_titles, norm_count)
     hit_length = _find_exact(norm_titles, norm_length)
     if hit_count is not None:
-        if hit_length is not None and not count_rows.get(hit_count):
+        if hit_length is not None and _count_is_placeholder(
+            count_rows.get(hit_count), column_symbols
+        ):
             return SheetMatch(hit_length, "exact", "length", candidates)
         return SheetMatch(hit_count, "exact", "count", candidates)
     if hit_length is not None:
         return SheetMatch(hit_length, "exact", "length", candidates)
 
-    # 2) partial
-    hit = _find_partial(norm_titles, norm_count)
-    if hit is not None:
-        return SheetMatch(hit, "partial", "count", candidates)
-    hit = _find_partial(norm_titles, norm_length)
-    if hit is not None:
-        return SheetMatch(hit, "partial", "length", candidates)
+    # 2) partial — exact 와 동일하게, 매칭된 count 행이 (스코프 기준)
+    #    placeholder 이고 length 라벨도 잡히면 length 가 우선한다.
+    hit_count = _find_partial(norm_titles, norm_count)
+    hit_length = _find_partial(norm_titles, norm_length)
+    if hit_count is not None:
+        if hit_length is not None and _count_is_placeholder(
+            count_rows.get(hit_count), column_symbols
+        ):
+            return SheetMatch(hit_length, "partial", "length", candidates)
+        return SheetMatch(hit_count, "partial", "count", candidates)
+    if hit_length is not None:
+        return SheetMatch(hit_length, "partial", "length", candidates)
 
     # 3) fallback yaml
     overrides = load_overrides(drawing, overrides_path)

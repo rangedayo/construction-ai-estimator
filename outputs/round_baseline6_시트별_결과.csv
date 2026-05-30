@@ -1,0 +1,19 @@
+﻿도면,파일명,추출도면명,매칭시트,신뢰도,측정카운트,정답카운트,카운트결과,측정길이,정답길이,길이결과,측정규격,정답규격,규격결과
+도면1,도면1-1동_1~3층기둥부호도.dxf,1~3층 기둥부호도,(1동)기둥부호도-1(1~3층 기둥부호도),partial,"MC1=12,MC2=6,MC3=0,SC1=0","MC1=12,MC2=6,MC3=0,SC1=0",PASS,N/A,N/A,N/A,"MC1=H-588x300x12x20,MC2=H-200x200x8x12","MC1=H-588x300x12x20,MC2=H-200x200x8x12",PASS
+도면1,도면1-1동_1~3층기둥주심도.dxf,1~3층 기둥주심도,(1동)기둥주심도-1(1~3층 기둥주심도),partial,"MC1=12,MC2=6,MC3=0,SC1=0","MC1=12,MC2=6,MC3=0,SC1=0",PASS,N/A,N/A,N/A,"MC1=H-588x300x12x20,MC2=H-200x200x8x12","MC1=H-588x300x12x20,MC2=H-200x200x8x12",PASS
+도면1,도면1-1동_2층바닥보복도.dxf,2층 바닥보복도,(1동)2층바닥보복도,partial,"MC1=0,MC2=0,MC3=0,SC1=0","MC1=0,MC2=0,MC3=0,SC1=0",PASS,N/A,N/A,N/A,,,N/A
+도면1,도면1-1동_3층바닥보복도.dxf,3층 바닥보복도,(1동)3층바닥보복도,partial,"MC1=0,MC2=0,MC3=0,SC1=0","MC1=0,MC2=0,MC3=0,SC1=0",PASS,N/A,N/A,N/A,,,N/A
+도면1,도면1-1동_기초구조도.dxf,기초구조도,(1동)기초구조도,partial,"MC1=0,MC2=0,MC3=0,SC1=0","MC1=0,MC2=0,MC3=0,SC1=0",PASS,N/A,N/A,N/A,,,N/A
+도면1,도면1-1동_옥상바닥보복도.dxf,옥상 바닥보복도,(1동)옥상바닥보복도,partial,"MC1=0,MC2=0,MC3=0,SC1=0","MC1=0,MC2=0,MC3=0,SC1=0",PASS,N/A,N/A,N/A,,,N/A
+도면1,도면1-1동_옥상층기둥부호도.dxf,옥상층 기둥부호도,(1동)기둥부호도-2(옥상층 기둥부호도),partial,"MC1=0,MC2=4,MC3=0,SC1=0","MC1=0,MC2=4,MC3=0,SC1=0",PASS,N/A,N/A,N/A,MC2=H-200x200x8x12,MC2=H-200x200x8x12,PASS
+도면1,도면1-1동_옥상층기둥주심도.dxf,옥상층 기둥주심도,(1동)기둥주심도-2(옥상층 기둥주심도),partial,"MC1=0,MC2=4,MC3=0,SC1=0","MC1=0,MC2=4,MC3=0,SC1=0",PASS,N/A,N/A,N/A,MC2=H-200x200x8x12,MC2=H-200x200x8x12,PASS
+도면1,도면1-2동_SL+4.0M구조평면도.dxf,SL+4.0M구조평면도,(2동)SL+4.0M구조평면도,partial,"MC1=0,MC2=0,MC3=2,SC1=0","MC1=0,MC2=0,MC3=2,SC1=0",PASS,N/A,N/A,N/A,MC3=H-250x250x9x14,MC3=H-250x250x9x14,PASS
+도면1,도면1-2동_SL+4.7M구조평면도.dxf,SL+4.7M구조평면도,(2동)SL+4.7M구조평면도,partial,"MC1=0,MC2=0,MC3=0,SC1=0","MC1=0,MC2=0,MC3=0,SC1=0",PASS,N/A,N/A,N/A,,,N/A
+도면1,도면1-2동_Y01열골구도.dxf,Y01열 골구도,(2동)Y01열골구도,partial,N/A,N/A,N/A,6000,6000,PASS,N/A,N/A,N/A
+도면1,도면1-2동_Y03Y05열골구도.dxf,Y03열 골구도,"(2동)Y03,Y05열골구도",partial,N/A,N/A,N/A,6000,6000,PASS,N/A,N/A,N/A
+도면1,도면1-2동_Y03열골구도.dxf,Y03열 골구도,,unmatched,N/A,N/A,N/A,N/A,N/A,N/A,N/A,N/A,N/A
+도면1,도면1-2동_Y05열골구도.dxf,Y05열 골구도,"(2동)Y03,Y05열골구도",partial,N/A,N/A,N/A,6000,6000,PASS,N/A,N/A,N/A
+도면1,도면1-2동_기둥부호도.dxf,기둥부호도,(2동)기둥부호도,partial,"MC1=15,MC2=4,MC3=2,SC1=4","MC1=15,MC2=4,MC3=2,SC1=4",PASS,N/A,N/A,N/A,"MC1=H-400x200x8x13,MC2=H-440x300x11x18,MC3=H-250x250x9x14,SC1=H-300x150x6.5x9","MC1=H-400x200x8x13,MC2=H-440x300x11x18,MC3=H-250x250x9x14,SC1=H-300x150x6.5x9",PASS
+도면1,도면1-2동_기둥주심도.dxf,기둥주심도,(2동)기둥주심도,partial,"MC1=15,MC2=4,MC3=2,SC1=4","MC1=15,MC2=4,MC3=2,SC1=4",PASS,N/A,N/A,N/A,"MC1=H-400x200x8x13,MC2=H-440x300x11x18,MC3=H-250x250x9x14,SC1=H-300x150x6.5x9","MC1=H-400x200x8x13,MC2=H-440x300x11x18,MC3=H-250x250x9x14,SC1=H-300x150x6.5x9",PASS
+도면1,도면1-2동_기초구조도.dxf,기초구조도,(2동)기초구조도,partial,"MC1=0,MC2=0,MC3=0,SC1=0","MC1=0,MC2=0,MC3=0,SC1=0",PASS,N/A,N/A,N/A,,,N/A
+도면1,도면1-2동_지붕구조평면도.dxf,지붕구조평면도,(2동)지붕구조평면도,partial,"MC1=0,MC2=0,MC3=0,SC1=0","MC1=0,MC2=0,MC3=0,SC1=0",PASS,N/A,N/A,N/A,,,N/A
